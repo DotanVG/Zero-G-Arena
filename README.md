@@ -1,23 +1,17 @@
-# Zero-G Arena
+# Orbital Breach
 
-A space-themed 3D shooter game built with Three.js, forked from the Vibe Jam Toon Shooter starter template.
+Browser-based zero-gravity FPS scaffold split into `client`, `server`, and `shared` packages.
 
-## Project Structure
-
-```
-toonshooter-template/   # Base template (Tiny Toon Duel / Three.js shooter)
-```
-
-## Running Locally
+## Quick Start
 
 ```bash
-npm install -g serve
-serve toonshooter-template/public
+cd client
+npm install
+npm run dev
 ```
 
-Visit `http://localhost:3000/toonshooter/` to play.
-
-## Tech Stack
-
-- Three.js (3D rendering)
-- Static hosting (Vercel-ready)
+```bash
+cd server
+npm install
+npm run dev
+```

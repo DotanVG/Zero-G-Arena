@@ -1,0 +1,11 @@
+export const ARENA_SIZE = 40;
+export const PLAYER_RADIUS = 0.8;
+export const TICK_RATE = 20;
+export const FREEZE_TIME = 2.0;
+export const RESPAWN_TIME = 2.0;
+export const INVULN_TIME = 0.5;
+export const MAX_SPEED = 16;
+export const ACCEL = 18;
+export const DAMPING = 0.92;
+export const BOOST = 10;
+export const FIRE_RATE = 6;

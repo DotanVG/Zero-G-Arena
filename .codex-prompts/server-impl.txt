@@ -1,0 +1,205 @@
+Implement the SERVER for Orbital Breach (Node.js WebSocket game server). Replace all stubs with real working code. Do NOT change filenames or add new files.
+
+The shared types are in shared/schema.ts. Import them with relative paths like '../../shared/schema'.
+
+=== server/src/messages.ts ===
+Import ClientMessage, ServerStateMsg, ServerEventMsg from '../../shared/schema'.
+Import WebSocket from 'ws'.
+- function parseClientMsg(raw: string): ClientMessage | null
+    try JSON.parse(raw), validate has .t field string, return typed object or null on error
+- function sendState(ws: WebSocket, msg: ServerStateMsg): void
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
+- function sendEvent(ws: WebSocket, type: 'hit'|'score'|'spawn', data: any): void
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({t:'event',type,data}))
+
+=== server/src/player.ts ===
+Import ClientInputMsg, PlayerNetState from '../../shared/schema'.
+Import FREEZE_TIME, RESPAWN_TIME, INVULN_TIME from '../../shared/constants'.
+Class ServerPlayer:
+- id: string  (crypto.randomUUID() or Math.random().toString(36).slice(2))
+- name: string
+- team: 0|1
+- pos: {x:number,y:number,z:number}
+- vel: {x:number,y:number,z:number}
+- rot: {yaw:number,pitch:number,roll:number}
+- state: 'ACTIVE'|'FROZEN'|'RESPAWNING' = 'ACTIVE'
+- frozenTimer = 0
+- respawnTimer = 0
+- invulnTimer = 0
+- lastInput: ClientInputMsg | null = null
+- seq = 0
+- constructor(name: string, team: 0|1):
+    this.id = Math.random().toString(36).slice(2,10)
+    this.name = name
+    this.team = team
+    this.pos = team===0 ? {x:0,y:0,z:-15} : {x:0,y:0,z:15}
+    this.vel = {x:0,y:0,z:0}
+    this.rot = {yaw:0,pitch:0,roll:0}
+- toNetState(): PlayerNetState
+    return { id, team, pos, vel, rot, state }
+
+=== server/src/sim.ts ===
+Import ServerPlayer from './player'.
+Import ServerStateMsg, ArenaStateId, ClientInputMsg from '../../shared/schema'.
+Import ARENA_SIZE, PLAYER_RADIUS, ACCEL, MAX_SPEED, DAMPING, BOOST, FREEZE_TIME from '../../shared/constants'.
+
+Class Sim:
+- players: Map<string, ServerPlayer> = new Map()
+- score = { team0: 0, team1: 0 }
+- arenaStateId: ArenaStateId = 'A'
+- seq = 0
+
+- addPlayer(p: ServerPlayer): void — players.set(p.id, p)
+- removePlayer(id: string): void — players.delete(id)
+
+- tick(dt: number): void
+    for each player p of players.values():
+      if p.state === 'ACTIVE': applyInput(p); integratePlayer(p, dt); bounceArena(p); checkGoal(p)
+      if p.state === 'FROZEN': p.frozenTimer -= dt; dampVel(p, 0.7); if(p.frozenTimer<=0) { p.state='ACTIVE' }
+      if p.state === 'RESPAWNING': p.respawnTimer -= dt; if(p.respawnTimer<=0) { p.state='ACTIVE'; p.invulnTimer=0.5; resetPos(p) }
+      if p.invulnTimer > 0: p.invulnTimer -= dt
+
+- private applyInput(p: ServerPlayer): void
+    if (!p.lastInput) return
+    const inp = p.lastInput
+    if (inp.seq <= p.seq) return
+    p.seq = inp.seq
+    p.rot = inp.rot
+
+- private integratePlayer(p: ServerPlayer, dt: number): void
+    if (!p.lastInput) return
+    const inp = p.lastInput
+    const { yaw, pitch } = p.rot
+    // reconstruct forward/right/up from yaw+pitch (no roll for server physics)
+    const cy = Math.cos(yaw), sy = Math.sin(yaw)
+    const cp = Math.cos(pitch), sp = Math.sin(pitch)
+    const forward = { x: -sy*cp, y: sp, z: -cy*cp }
+    const right = { x: cy, y: 0, z: -sy }
+    const up = { x: sy*sp, y: cp, z: cy*sp }
+    const ax = inp.axes
+    const scale = ACCEL * dt
+    p.vel.x += (right.x*ax.x + up.x*ax.y + forward.x*ax.z) * scale
+    p.vel.y += (right.y*ax.x + up.y*ax.y + forward.y*ax.z) * scale
+    p.vel.z += (right.z*ax.x + up.z*ax.y + forward.z*ax.z) * scale
+    if (inp.boost):
+      p.vel.x += forward.x * BOOST
+      p.vel.y += forward.y * BOOST
+      p.vel.z += forward.z * BOOST
+    p.vel.x *= DAMPING; p.vel.y *= DAMPING; p.vel.z *= DAMPING
+    const spd = Math.sqrt(p.vel.x**2+p.vel.y**2+p.vel.z**2)
+    if (spd > MAX_SPEED): const f=MAX_SPEED/spd; p.vel.x*=f; p.vel.y*=f; p.vel.z*=f
+    p.pos.x += p.vel.x * dt
+    p.pos.y += p.vel.y * dt
+    p.pos.z += p.vel.z * dt
+
+- private bounceArena(p: ServerPlayer): void
+    const limit = ARENA_SIZE/2 - PLAYER_RADIUS
+    for (const ax of ['x','y','z'] as const):
+      if (p.pos[ax] > limit): p.pos[ax]=limit; p.vel[ax]=-Math.abs(p.vel[ax])*0.5
+      if (p.pos[ax] < -limit): p.pos[ax]=-limit; p.vel[ax]=Math.abs(p.vel[ax])*0.5
+
+- private dampVel(p: ServerPlayer, factor: number): void
+    p.vel.x*=factor; p.vel.y*=factor; p.vel.z*=factor
+
+- private checkGoal(p: ServerPlayer): void
+    // State A: goals at z=±20 for teams
+    if (this.arenaStateId === 'A'):
+      const goalZ = p.team===0 ? 20 : -20  // enemy goal
+      if (Math.abs(p.pos.z - goalZ) < 1.5 && Math.abs(p.pos.x) < 10 && Math.abs(p.pos.y) < 10):
+        if (p.team===0) this.score.team0++; else this.score.team1++
+        this.resetPos(p); p.state='RESPAWNING'; p.respawnTimer=2.0
+
+- private resetPos(p: ServerPlayer): void
+    p.pos = p.team===0 ? {x:0,y:0,z:-15} : {x:0,y:0,z:15}
+    p.vel = {x:0,y:0,z:0}
+
+- handleShot(shooterId: string, targetId: string): void
+    const target = players.get(targetId)
+    if (!target || target.state!=='ACTIVE' || target.invulnTimer>0) return
+    const shooter = players.get(shooterId)
+    if (!shooter) return
+    target.state = 'FROZEN'
+    target.frozenTimer = FREEZE_TIME
+    // apply impulse away from shooter
+    const dx = target.pos.x-shooter.pos.x, dy = target.pos.y-shooter.pos.y, dz = target.pos.z-shooter.pos.z
+    const len = Math.sqrt(dx*dx+dy*dy+dz*dz) || 1
+    target.vel.x += dx/len*3; target.vel.y += dy/len*3; target.vel.z += dz/len*3
+
+- getSnapshot(): ServerStateMsg
+    return { t:'state', seq:++this.seq, players:[...players.values()].map(p=>p.toNetState()), score:this.score, arenaState:this.arenaStateId }
+
+=== server/src/room.ts ===
+Import WebSocket from 'ws'.
+Import Sim from './sim'.
+Import ServerPlayer from './player'.
+Import sendState, parseClientMsg from './messages'.
+Import TICK_RATE from '../../shared/constants'.
+
+Class Room:
+- id: string
+- clients: Map<WebSocket, ServerPlayer> = new Map()
+- sim: Sim = new Sim()
+- private tickInterval: ReturnType<typeof setInterval> | null = null
+
+- constructor(id: string): this.id = id
+
+- addClient(ws: WebSocket, name: string): ServerPlayer
+    const team: 0|1 = (this.clients.size % 2 === 0) ? 0 : 1
+    const player = new ServerPlayer(name, team)
+    this.clients.set(ws, player)
+    this.sim.addPlayer(player)
+    return player
+
+- removeClient(ws: WebSocket): void
+    const player = this.clients.get(ws)
+    if (player): this.sim.removePlayer(player.id)
+    this.clients.delete(ws)
+
+- start(): void
+    if (this.tickInterval) return
+    this.tickInterval = setInterval(()=>{
+      this.sim.tick(1/TICK_RATE)
+      const snap = this.sim.getSnapshot()
+      this.broadcast(snap)
+    }, 1000/TICK_RATE)
+
+- broadcast(msg: any): void
+    const str = JSON.stringify(msg)
+    for (const [ws] of this.clients):
+      if (ws.readyState === WebSocket.OPEN) ws.send(str)
+
+- stop(): void — if(this.tickInterval): clearInterval(this.tickInterval); this.tickInterval=null
+
+=== server/src/index.ts ===
+import { WebSocketServer, WebSocket } from 'ws'
+import { Room } from './room'
+import { parseClientMsg } from './messages'
+
+const PORT = Number(process.env.PORT) || 3001
+const wss = new WebSocketServer({ port: PORT })
+const defaultRoom = new Room('default')
+defaultRoom.start()
+
+wss.on('connection', (ws: WebSocket, req) => {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const name = url.searchParams.get('name') ?? 'Player'
+  const player = defaultRoom.addClient(ws, name)
+  sendState(ws, defaultRoom.sim.getSnapshot()) — send initial state
+
+  ws.on('message', (raw) => {
+    const msg = parseClientMsg(raw.toString())
+    if (!msg) return
+    if (msg.t === 'input') {
+      const p = defaultRoom.clients.get(ws)
+      if (p) p.lastInput = msg
+    }
+  })
+
+  ws.on('close', () => defaultRoom.removeClient(ws))
+  ws.on('error', () => ws.terminate())
+})
+
+console.log('Orbital Breach server running on port', PORT)
+
+Note: make sure to import sendState in index.ts from './messages'.
+TypeScript must compile cleanly.

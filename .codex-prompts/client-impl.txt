@@ -1,0 +1,256 @@
+Implement the CLIENT-SIDE POC for Orbital Breach (a browser zero-gravity FPS). Replace all stub implementations with real working code. Do NOT change any filenames or add new files — only fill in the existing stubs.
+
+=== shared/schema.ts — update to full spec ===
+Replace with these interfaces:
+- type ArenaStateId = 'A' | 'B' | 'C'
+- interface PlayerNetState { id: string, team: 0|1, pos:{x:number,y:number,z:number}, vel:{x:number,y:number,z:number}, rot:{yaw:number,pitch:number,roll:number}, state: 'ACTIVE'|'FROZEN'|'RESPAWNING' }
+- interface ScoreState { team0: number, team1: number }
+- interface ServerStateMsg { t:'state', seq:number, players: PlayerNetState[], score: ScoreState, arenaState: ArenaStateId }
+- interface ServerEventMsg { t:'event', type:'hit'|'score'|'spawn', data: any }
+- interface ClientInputMsg { t:'input', id:string, seq:number, axes:{x:number,y:number,z:number}, boost:boolean, fire:boolean, rot:{yaw:number,pitch:number,roll:number} }
+- interface ClientJoinMsg { t:'join', name:string }
+- type ClientMessage = ClientInputMsg | ClientJoinMsg
+
+=== client/src/util/math.ts ===
+Import Vector3 from 'three'. Implement:
+- clampMagnitude(v: Vector3, max: number): Vector3  — if v.length() > max, scale to max, return v
+- lerpVec3(a: Vector3, b: Vector3, t: number): Vector3  — return new Vector3().lerpVectors(a,b,t)
+
+=== client/src/input.ts ===
+Import FIRE_RATE from '../../shared/constants'.
+Class InputManager:
+- private keys: Set<string>
+- private mouseDx = 0, mouseDy = 0
+- private fireCooldown = 0
+- mouseSensitivity = 0.002
+- constructor: addEventListener keydown/keyup to track keys, mousemove to accumulate dx/dy (only when pointer locked), mousedown/mouseup for LMB
+- getAxes(): {x:number,y:number,z:number}  — x: (D key ? 1:0)-(A key ? 1:0), y: (Space?1:0)-(ControlLeft?1:0), z: (W?1:0)-(S?1:0)  — note: z positive = forward
+- consumeMouseDelta(): {dx:number,dy:number}  — return current dx/dy then reset to 0
+- isBoost(): boolean  — ShiftLeft held
+- updateFireCooldown(dt: number): void  — decrement fireCooldown by dt
+- canFire(): boolean  — fireCooldown <= 0 (also resets to 1/FIRE_RATE when true)
+- isRoll(): {left:boolean,right:boolean}  — Q and E keys
+- lockPointer(canvas: HTMLCanvasElement): void  — canvas.requestPointerLock()
+- isLocked(): boolean  — document.pointerLockElement != null
+
+=== client/src/camera.ts ===
+Import * as THREE from 'three'.
+Class CameraController:
+- private yaw = 0, pitch = 0, roll = 0
+- constructor(private camera: THREE.PerspectiveCamera)
+- applyMouseDelta(dx: number, dy: number, rollDelta: number, sensitivity: number): void
+    yaw -= dx * sensitivity
+    pitch -= dy * sensitivity
+    pitch = clamp(pitch, -Math.PI*89/180, Math.PI*89/180)
+    roll += rollDelta * 0.04
+    roll = clamp(roll, -Math.PI/4, Math.PI/4)  — gentle auto-return: roll *= 0.9 if no roll input
+- getQuaternion(): THREE.Quaternion
+    qYaw = Quaternion from axisAngle(0,1,0, yaw)
+    qPitch = Quaternion from axisAngle(1,0,0, pitch)
+    qRoll = Quaternion from axisAngle(0,0,1, roll)
+    return qYaw * qPitch * qRoll
+- getForward(): THREE.Vector3  — new Vector3(0,0,-1).applyQuaternion(getQuaternion())
+- getRight(): THREE.Vector3  — new Vector3(1,0,0).applyQuaternion(getQuaternion())
+- getUp(): THREE.Vector3  — new Vector3(0,1,0).applyQuaternion(getQuaternion())
+- apply(position: THREE.Vector3): void  — camera.position.copy(position); camera.quaternion.copy(getQuaternion())
+
+=== client/src/physics.ts ===
+Import Vector3 from 'three', constants from shared, clampMagnitude from util/math.
+interface PhysicsState { pos: THREE.Vector3, vel: THREE.Vector3 }
+function integrate(state: PhysicsState, axes: {x:number,y:number,z:number}, forward: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3, boost: boolean, dt: number): void
+  const accelDir = right.clone().multiplyScalar(axes.x)
+    .add(up.clone().multiplyScalar(axes.y))
+    .add(forward.clone().multiplyScalar(axes.z))
+  state.vel.addScaledVector(accelDir, ACCEL * dt)
+  if (boost) state.vel.addScaledVector(forward, BOOST)
+  state.vel.multiplyScalar(DAMPING)
+  clampMagnitude(state.vel, MAX_SPEED)
+  state.pos.addScaledVector(state.vel, dt)
+
+function bounceArena(state: PhysicsState): void
+  const limit = ARENA_SIZE / 2 - PLAYER_RADIUS
+  for each axis (x,y,z): if pos > limit: pos = limit, vel = -abs(vel)*0.5; if pos < -limit: same
+
+=== client/src/arena/states.ts ===
+interface ObstacleDef { pos:[number,number,number], size:[number,number,number] }
+interface GoalDef { axis:'x'|'y'|'z', sign:1|-1, team:0|1 }
+interface ArenaConfig { id:'A'|'B'|'C', goals:[GoalDef,GoalDef], obstacles:ObstacleDef[] }
+
+export const STATE_A: ArenaConfig = {
+  id: 'A',
+  goals: [{axis:'z',sign:-1,team:0},{axis:'z',sign:1,team:1}],
+  obstacles: [
+    {pos:[0,0,0],size:[16,1,1]}, {pos:[0,0,0],size:[1,16,1]},
+    {pos:[8,8,0],size:[3,3,1]}, {pos:[-8,-8,0],size:[3,3,1]},
+    {pos:[8,-8,0],size:[3,3,1]}, {pos:[-8,8,0],size:[3,3,1]}
+  ]
+}
+export const STATE_B: ArenaConfig = {
+  id: 'B',
+  goals: [{axis:'y',sign:-1,team:0},{axis:'y',sign:1,team:1}],
+  obstacles: [
+    {pos:[10,0,10],size:[1,12,1]}, {pos:[-10,0,10],size:[1,12,1]},
+    {pos:[10,0,-10],size:[1,12,1]}, {pos:[-10,0,-10],size:[1,12,1]}
+  ]
+}
+export const STATE_C: ArenaConfig = {
+  id: 'C',
+  goals: [{axis:'x',sign:-1,team:0},{axis:'x',sign:1,team:1}],
+  obstacles: [
+    {pos:[0,8,8],size:[1,10,10]}, {pos:[0,-8,-8],size:[1,10,10]},
+    {pos:[0,8,-8],size:[1,10,10]}, {pos:[0,-8,8],size:[1,10,10]}
+  ]
+}
+export const ARENA_STATES: Record<string, ArenaConfig> = { A: STATE_A, B: STATE_B, C: STATE_C }
+
+=== client/src/arena/goal.ts ===
+Import * as THREE from 'three', makeGoalMaterial from render/materials, ARENA_SIZE from shared/constants.
+Class GoalPlane:
+- private mesh: THREE.Mesh
+- constructor(private config: GoalDef, private scene: THREE.Scene)
+    create PlaneGeometry(20,20), position at config.axis * config.sign * ARENA_SIZE/2
+    rotate to face inward, add to scene
+- checkEntry(playerPos: THREE.Vector3, playerTeam: 0|1): boolean
+    if playerTeam === config.team return false  (same team cant score on own goal)
+    check |playerPos[axis] - sign*ARENA_SIZE/2| < 1.5  AND the other two axes within ±10
+    return true if both pass
+- dispose(): void — scene.remove(mesh)
+
+=== client/src/arena/arena.ts ===
+Import * as THREE from 'three', ArenaConfig/ARENA_STATES from ./states, GoalPlane from ./goal, makeArenaMaterial/makeObstacleMaterial from render/materials, ARENA_SIZE from shared/constants.
+Class Arena:
+- private obstaclesGroup: THREE.Group
+- private goalPlanes: GoalPlane[] = []
+- private currentState: ArenaConfig
+- constructor(private scene: THREE.Scene)
+    build wireframe cube: new THREE.BoxGeometry(ARENA_SIZE, ARENA_SIZE, ARENA_SIZE), EdgesGeometry, LineSegments with makeArenaMaterial()
+    obstaclesGroup = new THREE.Group(); scene.add(obstaclesGroup)
+    setState('A')
+- setState(id: 'A'|'B'|'C'): void
+    clear obstaclesGroup children
+    goalPlanes.forEach(g=>g.dispose()); goalPlanes=[]
+    config = ARENA_STATES[id]; currentState = config
+    build each obstacle as Mesh(BoxGeometry(size), makeObstacleMaterial()), position, add to group
+    create two GoalPlane instances from config.goals
+- getObstacleAABBs(): Array<{min:THREE.Vector3,max:THREE.Vector3}>
+    return obstaclesGroup.children.map(m => new THREE.Box3().setFromObject(m as THREE.Mesh))
+- getGoalPlanes(): GoalPlane[]
+- getCurrentStateId(): 'A'|'B'|'C'
+
+=== client/src/player.ts ===
+Import * as THREE from 'three', PhysicsState/integrate/bounceArena from physics, InputManager from input, CameraController from camera, Arena from arena/arena, makePlayerMaterial from render/materials, FREEZE_TIME/RESPAWN_TIME/INVULN_TIME from shared/constants.
+Class LocalPlayer:
+- phys: PhysicsState = { pos: new Vector3(0,0,-15), vel: new Vector3() }
+- team: 0|1 = 0
+- score = 0
+- state: 'ACTIVE'|'FROZEN'|'RESPAWNING' = 'ACTIVE'
+- frozenTimer = 0, respawnTimer = 0, invulnTimer = 0, boostCooldown = 0
+- private mesh: THREE.Mesh
+- constructor(scene: THREE.Scene): create SphereGeometry(0.8,8,8), makePlayerMaterial(0), add to scene
+- update(input: InputManager, cam: CameraController, arena: Arena, dt: number): void
+    if ACTIVE:
+      boost = input.isBoost() && boostCooldown<=0
+      if boost: boostCooldown = 1.5
+      boostCooldown = max(0, boostCooldown-dt)
+      integrate(phys, input.getAxes(), cam.getForward(), cam.getRight(), cam.getUp(), boost, dt)
+      bounceArena(phys)
+      invulnTimer = max(0, invulnTimer-dt)
+      for goal of arena.getGoalPlanes():
+        if invulnTimer<=0 && goal.checkEntry(phys.pos, team): score++; respawn()
+    if FROZEN:
+      frozenTimer -= dt; phys.vel.multiplyScalar(0.7)
+      if frozenTimer<=0: state='ACTIVE'
+    if RESPAWNING:
+      respawnTimer -= dt
+      if respawnTimer<=0: state='ACTIVE'; invulnTimer=INVULN_TIME
+- freeze(impulse: THREE.Vector3): void — state=FROZEN; frozenTimer=FREEZE_TIME; phys.vel.add(impulse)
+- respawn(): void — state=RESPAWNING; respawnTimer=RESPAWN_TIME; phys.pos.set(0,0,team===0?-15:15); phys.vel.set(0,0,0)
+- getPosition(): THREE.Vector3
+- getMesh(): THREE.Mesh
+- getFrozenTimer(): number
+- getScore(): number
+
+=== client/src/render/scene.ts ===
+Import * as THREE from 'three'.
+Class SceneManager:
+- scene: THREE.Scene
+- camera: THREE.PerspectiveCamera
+- renderer: THREE.WebGLRenderer
+- constructor():
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x080c14)
+    camera = new THREE.PerspectiveCamera(90, window.innerWidth/innerHeight, 0.1, 500)
+    renderer = new THREE.WebGLRenderer({antialias:true}); renderer.setSize(window.innerWidth,window.innerHeight)
+    document.body.appendChild(renderer.domElement)
+    add DirectionalLight(0xffffff,1.2) at (10,20,10), AmbientLight(0x334466,0.5)
+    window.addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight) })
+- render(): void — renderer.render(scene, camera)
+- getScene(): THREE.Scene
+- getCamera(): THREE.PerspectiveCamera
+- getRenderer(): THREE.WebGLRenderer — for getting canvas
+
+=== client/src/render/materials.ts ===
+Import * as THREE from 'three'.
+Export:
+- makeArenaMaterial(): THREE.LineBasicMaterial — color 0x334455, transparent:true, opacity:0.6
+- makeObstacleMaterial(): THREE.MeshStandardMaterial — color 0x2a3a4a, metalness:0.3, roughness:0.7
+- makeGoalMaterial(team:0|1): THREE.MeshStandardMaterial — color + emissive: team0=(0x004444,0x00ffff), team1=(0x440044,0xff00ff), emissiveIntensity:0.8, side:THREE.DoubleSide, transparent:true, opacity:0.5
+- makePlayerMaterial(team:0|1): THREE.MeshStandardMaterial — color: team0=0x00ffff, team1=0xff00ff, emissive same, emissiveIntensity:0.4
+
+=== client/src/render/hud.ts ===
+Class HUD:
+- private el: HTMLDivElement
+- constructor():
+    el = document.createElement('div')
+    el.style: position fixed, top 0, left 0, width 100%, height 100%, pointerEvents none, fontFamily monospace, color white
+    el.innerHTML = initial HTML with:
+      #hud-start (center overlay, click to play message)
+      #hud-crosshair (4px white dot, centered)
+      #hud-score (top center, font-size 20px)
+      #hud-frozen (center screen, display:none, red text FROZEN + timer)
+    document.body.appendChild(el)
+- update(score:{team0:number,team1:number}, playerState:string, frozenTime:number): void
+    #hud-score.textContent = score string
+    if FROZEN: show #hud-frozen with frozenTime.toFixed(1)s else hide
+- showStart(): void — show #hud-start
+- hideStart(): void — hide #hud-start
+
+=== client/src/app.ts ===
+Import * as THREE from 'three', SceneManager, InputManager, CameraController, LocalPlayer, Arena, HUD.
+Class App:
+- private sceneMgr: SceneManager
+- private input: InputManager
+- private cam: CameraController
+- private player: LocalPlayer
+- private arena: Arena
+- private hud: HUD
+- private lastTime = 0
+- constructor():
+    sceneMgr = new SceneManager()
+    input = new InputManager()
+    cam = new CameraController(sceneMgr.getCamera())
+    arena = new Arena(sceneMgr.getScene())
+    player = new LocalPlayer(sceneMgr.getScene())
+    hud = new HUD()
+- start(): void
+    hud.showStart()
+    document.addEventListener('click', ()=>{ if(!input.isLocked()){ input.lockPointer(sceneMgr.getRenderer().domElement); hud.hideStart() } })
+    requestAnimationFrame((t)=>this.loop(t))
+- private loop(timestamp: number): void
+    const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05)
+    this.lastTime = timestamp
+    if (input.isLocked()):
+      const {dx,dy} = input.consumeMouseDelta()
+      const roll = input.isRoll()
+      cam.applyMouseDelta(dx, dy, (roll.right?1:0)-(roll.left?1:0), input.mouseSensitivity)
+      input.updateFireCooldown(dt)
+      player.update(input, cam, arena, dt)
+      cam.apply(player.getPosition())
+      hud.update({team0:player.getScore(),team1:0}, player.state, player.getFrozenTimer())
+    sceneMgr.render()
+    requestAnimationFrame((t)=>this.loop(t))
+
+=== client/src/main.ts ===
+import { App } from './app';
+new App().start();
+
+All Three.js imports must use 'three'. TypeScript must compile cleanly with no errors.

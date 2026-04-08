@@ -168,11 +168,36 @@ export class HUD {
       breachEl.style.display = inBreach ? 'block' : 'none';
     }
 
-    // Grab prompt
+    // Contextual action prompt
     const grabEl = this.q<HTMLDivElement>('hud-grab');
     if (grabEl) {
-      const showGrab = nearBar && playerPhase === 'FLOATING' && !damage.leftArm && !damage.frozen;
-      grabEl.style.display = showGrab ? 'block' : 'none';
+      let promptText = '';
+      let showPrompt = false;
+
+      if (playerPhase === 'AIMING') {
+        showPrompt = true;
+        promptText = '↓ Pull mouse to charge power  ·  Release [SPACE] to launch';
+        grabEl.style.fontSize = '14px';
+        grabEl.style.color    = '#ffff88';
+        grabEl.style.textShadow = '0 0 8px #ffaa00';
+      } else if (playerPhase === 'GRABBING') {
+        showPrompt = true;
+        promptText = 'Hold [SPACE] to aim  ·  [E] to release bar';
+        grabEl.style.fontSize = '15px';
+        grabEl.style.color    = '#aaffff';
+        grabEl.style.textShadow = '0 0 8px #00ffff';
+      } else if (nearBar
+        && (playerPhase === 'FLOATING' || playerPhase === 'BREACH')
+        && !damage.leftArm && !damage.frozen) {
+        showPrompt = true;
+        promptText = '[E]  GRAB BAR';
+        grabEl.style.fontSize = '17px';
+        grabEl.style.color    = '#aaffff';
+        grabEl.style.textShadow = '0 0 8px #00ffff';
+      }
+
+      grabEl.style.display  = showPrompt ? 'block' : 'none';
+      if (showPrompt) grabEl.textContent = promptText;
     }
 
     // Power bar

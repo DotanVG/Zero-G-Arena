@@ -1,3 +1,72 @@
+Implement batch 3a of the Orbital Breach overhaul: rewrite arena.ts and goal.ts. Do NOT touch any other files.
+
+=== client/src/arena/goal.ts ===
+Replace entire file with:
+```typescript
+import * as THREE from 'three';
+import { ARENA_SIZE } from '../../../shared/constants';
+import { makeGoalMaterial } from '../render/materials';
+
+export interface GoalDef {
+  axis:  'x' | 'y' | 'z';
+  sign:  1 | -1;
+  team:  0 | 1;
+}
+
+export class GoalPlane {
+  private mesh: THREE.Mesh;
+
+  public constructor(
+    private config: GoalDef,
+    private scene:  THREE.Scene,
+  ) {
+    const geo = new THREE.PlaneGeometry(20, 20);
+    this.mesh = new THREE.Mesh(geo, makeGoalMaterial(config.team));
+
+    const pos = new THREE.Vector3();
+    pos[config.axis] = config.sign * (ARENA_SIZE / 2);
+    this.mesh.position.copy(pos);
+
+    // Rotate plane to face inward
+    if (config.axis === 'x') {
+      this.mesh.rotation.y = config.sign === 1 ? Math.PI / 2 : -Math.PI / 2;
+    } else if (config.axis === 'y') {
+      this.mesh.rotation.x = config.sign === 1 ? Math.PI / 2 : -Math.PI / 2;
+    } else {
+      this.mesh.rotation.y = config.sign === 1 ? Math.PI : 0;
+    }
+
+    scene.add(this.mesh);
+  }
+
+  /**
+   * Returns true only when an UNFROZEN player crosses into the enemy portal.
+   * Caller is responsible for checking player.damage.frozen before calling this.
+   */
+  public checkEntry(playerPos: THREE.Vector3, playerTeam: 0 | 1): boolean {
+    // Same team = own goal, no score
+    if (playerTeam === this.config.team) return false;
+
+    // Primary axis proximity
+    const target = this.config.sign * (ARENA_SIZE / 2);
+    if (Math.abs(playerPos[this.config.axis] - target) > 1.5) return false;
+
+    // Perpendicular axes within goal face bounds
+    const axes = (['x','y','z'] as const).filter(a => a !== this.config.axis);
+    return axes.every(a => Math.abs(playerPos[a]) < 10);
+  }
+
+  public dispose(): void {
+    this.scene.remove(this.mesh);
+    this.mesh.geometry.dispose();
+    (this.mesh.material as THREE.Material).dispose();
+  }
+}
+```
+
+=== client/src/arena/arena.ts ===
+Replace entire file with:
+```typescript
 import * as THREE from 'three';
 import {
   ARENA_SIZE,
@@ -17,32 +86,32 @@ import {
 } from '../render/materials';
 
 interface BreachRoom {
-  team: 0 | 1;
-  center: THREE.Vector3;
+  team:     0 | 1;
+  center:   THREE.Vector3;
   openAxis: 'x' | 'y' | 'z';
   openSign: 1 | -1;
-  group: THREE.Group;
+  group:    THREE.Group;
 }
 
 export class Arena {
   private obstaclesGroup = new THREE.Group();
-  private goalPlanes: GoalPlane[] = [];
-  private barObjects: BarObject[] = [];
-  private breachRooms: BreachRoom[] = [];
+  private goalPlanes:   GoalPlane[]  = [];
+  private barObjects:   BarObject[]  = [];
+  private breachRooms:  BreachRoom[] = [];
   private currentLayout: GeneratedLayout | null = null;
 
   public constructor(private scene: THREE.Scene) {
     // Wireframe cube
-    const cubeGeo = new THREE.BoxGeometry(ARENA_SIZE, ARENA_SIZE, ARENA_SIZE);
-    const edges = new THREE.EdgesGeometry(cubeGeo);
-    const lineSeg = new THREE.LineSegments(edges, makeArenaMaterial());
+    const cubeGeo  = new THREE.BoxGeometry(ARENA_SIZE, ARENA_SIZE, ARENA_SIZE);
+    const edges    = new THREE.EdgesGeometry(cubeGeo);
+    const lineSeg  = new THREE.LineSegments(edges, makeArenaMaterial());
     scene.add(lineSeg);
     cubeGeo.dispose();
 
     scene.add(this.obstaclesGroup);
   }
 
-  // -- Layout loading ----------------------------------------------
+  // ── Layout loading ───────────────────────────────────────────────
 
   public loadLayout(layout: GeneratedLayout): void {
     this.currentLayout = layout;
@@ -52,7 +121,7 @@ export class Arena {
 
     // Build obstacles + their bars
     for (const obs of layout.obstacles) {
-      const geo = new THREE.BoxGeometry(obs.size.x, obs.size.y, obs.size.z);
+      const geo  = new THREE.BoxGeometry(obs.size.x, obs.size.y, obs.size.z);
       const mesh = new THREE.Mesh(geo, makeObstacleMaterial());
       mesh.position.set(obs.pos.x, obs.pos.y, obs.pos.z);
       this.obstaclesGroup.add(mesh);
@@ -79,10 +148,10 @@ export class Arena {
     this.buildBreachRooms(goalAxis, goalSigns);
   }
 
-  // -- Breach rooms ------------------------------------------------
+  // ── Breach rooms ─────────────────────────────────────────────────
 
   private buildBreachRooms(
-    goalAxis: 'x' | 'y' | 'z',
+    goalAxis:  'x' | 'y' | 'z',
     goalSigns: { team0: 1 | -1; team1: 1 | -1 },
   ): void {
     for (const team of [0, 1] as const) {
@@ -107,15 +176,15 @@ export class Arena {
   }
 
   private buildBreachWalls(
-    group: THREE.Group,
-    team: 0 | 1,
+    group:    THREE.Group,
+    team:     0 | 1,
     openAxis: 'x' | 'y' | 'z',
     openSign: 1 | -1,
   ): void {
     const mat = makeBreachRoomMaterial(team);
-    const hw = BREACH_ROOM_W / 2;
-    const hh = BREACH_ROOM_H / 2;
-    const hd = BREACH_ROOM_D / 2;
+    const hw  = BREACH_ROOM_W / 2;
+    const hh  = BREACH_ROOM_H / 2;
+    const hd  = BREACH_ROOM_D / 2;
 
     // We build walls in LOCAL space (group is already positioned at center).
     // The open face is on the openAxis / openSign side.
@@ -133,34 +202,34 @@ export class Arena {
     // Floor
     addWall(BREACH_ROOM_W, BREACH_ROOM_D, 0, -hh, 0, -Math.PI / 2, 0, 0);
     // Ceiling
-    addWall(BREACH_ROOM_W, BREACH_ROOM_D, 0, hh, 0, Math.PI / 2, 0, 0);
+    addWall(BREACH_ROOM_W, BREACH_ROOM_D, 0,  hh, 0,  Math.PI / 2, 0, 0);
 
     if (openAxis === 'z') {
       // Left / right walls (X faces)
-      addWall(BREACH_ROOM_D, BREACH_ROOM_H, -hw, 0, 0, 0, Math.PI / 2, 0);
-      addWall(BREACH_ROOM_D, BREACH_ROOM_H, hw, 0, 0, 0, -Math.PI / 2, 0);
+      addWall(BREACH_ROOM_D, BREACH_ROOM_H, -hw, 0, 0, 0,  Math.PI / 2, 0);
+      addWall(BREACH_ROOM_D, BREACH_ROOM_H,  hw, 0, 0, 0, -Math.PI / 2, 0);
       // Back wall (away from arena)
       const backZ = openSign * -hd;
       addWall(BREACH_ROOM_W, BREACH_ROOM_H, 0, 0, backZ, 0, openSign === 1 ? Math.PI : 0, 0);
     } else if (openAxis === 'x') {
       addWall(BREACH_ROOM_D, BREACH_ROOM_H, 0, 0, -hw, 0, 0, Math.PI / 2);
-      addWall(BREACH_ROOM_D, BREACH_ROOM_H, 0, 0, hw, 0, 0, -Math.PI / 2);
+      addWall(BREACH_ROOM_D, BREACH_ROOM_H, 0, 0,  hw, 0, 0, -Math.PI / 2);
       const backX = openSign * -hd;
       addWall(BREACH_ROOM_H, BREACH_ROOM_W, backX, 0, 0, 0, openSign === 1 ? Math.PI / 2 : -Math.PI / 2, 0);
     } else {
       // openAxis === 'y'
-      addWall(BREACH_ROOM_W, BREACH_ROOM_D, -hw, 0, 0, 0, Math.PI / 2, 0);
-      addWall(BREACH_ROOM_W, BREACH_ROOM_D, hw, 0, 0, 0, -Math.PI / 2, 0);
+      addWall(BREACH_ROOM_W, BREACH_ROOM_D, -hw, 0, 0, 0,  Math.PI / 2, 0);
+      addWall(BREACH_ROOM_W, BREACH_ROOM_D,  hw, 0, 0, 0, -Math.PI / 2, 0);
       const backY = openSign * -hd;
       addWall(BREACH_ROOM_W, BREACH_ROOM_D, 0, backY, 0, openSign === 1 ? 0 : Math.PI, 0, 0);
     }
   }
 
   private placeBreachBars(
-    center: THREE.Vector3,
+    center:   THREE.Vector3,
     openAxis: 'x' | 'y' | 'z',
     openSign: 1 | -1,
-    team: 0 | 1,
+    team:     0 | 1,
   ): void {
     // Two bars: one on back wall, one on a side wall
     const hw = BREACH_ROOM_W / 2 - 0.5;
@@ -169,26 +238,26 @@ export class Arena {
 
     if (openAxis === 'z') {
       // Back wall bar (faces inward = openSign direction)
-      const backZ = center.z + openSign * (-hd);
-      const backN = { x: 0, y: 0, z: openSign as number };
+      const backZ  = center.z + openSign * (-hd);
+      const backN  = { x: 0, y: 0, z: openSign as number };
       this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(0, 0, backZ), backN));
 
       // Side wall bar
-      const sideX = center.x + hw;
-      const sideN = { x: -1, y: 0, z: 0 };
+      const sideX  = center.x + hw;
+      const sideN  = { x: -1, y: 0, z: 0 };
       this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(sideX, 0, center.z), sideN));
     } else if (openAxis === 'x') {
-      const backX = center.x + openSign * (-hd);
+      const backX  = center.x + openSign * (-hd);
       this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(backX, 0, 0), { x: openSign as number, y: 0, z: 0 }));
       this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(center.x, 0, hd), { x: 0, y: 0, z: -1 }));
     } else {
-      const backY = center.y + openSign * (-hd);
+      const backY  = center.y + openSign * (-hd);
       this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(0, backY, 0), { x: 0, y: openSign as number, z: 0 }));
       this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(hw, center.y, 0), { x: -1, y: 0, z: 0 }));
     }
   }
 
-  // -- Public queries ----------------------------------------------
+  // ── Public queries ───────────────────────────────────────────────
 
   public isInBreachRoom(pos: THREE.Vector3, team: 0 | 1): boolean {
     const room = this.breachRooms[team];
@@ -230,7 +299,7 @@ export class Arena {
   public bounceObstacles(state: PhysicsState): void {
     for (const child of this.obstaclesGroup.children) {
       const mesh = child as THREE.Mesh;
-      const box = new THREE.Box3().setFromObject(mesh);
+      const box  = new THREE.Box3().setFromObject(mesh);
       const inflated = {
         min: box.min.clone().subScalar(PLAYER_RADIUS),
         max: box.max.clone().addScalar(PLAYER_RADIUS),
@@ -249,7 +318,7 @@ export class Arena {
         z: Math.min(state.pos.z - inflated.min.z, inflated.max.z - state.pos.z),
       };
 
-      let minAx: 'x' | 'y' | 'z' = 'x';
+      let minAx: 'x'|'y'|'z' = 'x';
       if (overlaps.y < overlaps[minAx]) minAx = 'y';
       if (overlaps.z < overlaps[minAx]) minAx = 'z';
 
@@ -277,7 +346,7 @@ export class Arena {
     for (const bar of this.barObjects) bar.update(dt);
   }
 
-  // -- Cleanup helpers ---------------------------------------------
+  // ── Cleanup helpers ───────────────────────────────────────────────
 
   private clearObstacles(): void {
     for (const child of [...this.obstaclesGroup.children]) {
@@ -307,12 +376,14 @@ export class Arena {
     this.breachRooms = [];
   }
 
-  /** Legacy - kept so old code won't break at compile time if referenced */
+  /** Legacy — kept so old code won't break at compile time if referenced */
   public setState(_id: string): void {
     console.warn('setState() is deprecated; use loadLayout() instead');
   }
-
   public getCurrentStateId(): string {
     return this.currentLayout ? String(this.currentLayout.seed) : 'none';
   }
 }
+```
+
+Do not touch any other files.

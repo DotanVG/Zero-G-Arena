@@ -1,0 +1,414 @@
+Implement batch 2 of the Orbital Breach mechanics overhaul. Modify exactly these files. Do NOT touch any other files.
+
+=== client/src/physics.ts ===
+Replace the entire file with:
+```typescript
+import * as THREE from 'three';
+import {
+  ARENA_SIZE,
+  PLAYER_RADIUS,
+  ZERO_G_DAMPING,
+  MAX_LAUNCH_SPEED,
+  BREACH_GRAVITY,
+  BREACH_JUMP_SPEED,
+  BREACH_WALK_SPEED,
+  BREACH_ROOM_W,
+  BREACH_ROOM_H,
+  BREACH_ROOM_D,
+} from '../../shared/constants';
+import { clampMagnitude } from './util/math';
+
+export interface PhysicsState {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+}
+
+/**
+ * Zero-G drift integration — near-frictionless momentum.
+ * Used by FLOATING, GRABBING (vel clamped to 0 by player), and FROZEN players.
+ */
+export function integrateZeroG(state: PhysicsState, dt: number): void {
+  state.vel.multiplyScalar(ZERO_G_DAMPING);
+  clampMagnitude(state.vel, MAX_LAUNCH_SPEED);
+  state.pos.addScaledVector(state.vel, dt);
+}
+
+/**
+ * Bounce off arena cube walls (±ARENA_SIZE/2 on each axis).
+ * Used for all players inside the arena.
+ */
+export function bounceArena(state: PhysicsState): void {
+  const limit = ARENA_SIZE / 2 - PLAYER_RADIUS;
+  for (const ax of ['x', 'y', 'z'] as const) {
+    if (state.pos[ax] > limit) {
+      state.pos[ax] = limit;
+      if (state.vel[ax] > 0) state.vel[ax] *= -0.6;
+    }
+    if (state.pos[ax] < -limit) {
+      state.pos[ax] = -limit;
+      if (state.vel[ax] < 0) state.vel[ax] *= -0.6;
+    }
+  }
+}
+
+/**
+ * Breach room movement: gravity + WASD walk on XZ plane.
+ * Used when player.phase === 'BREACH'.
+ */
+export function integrateBreachRoom(
+  state:     PhysicsState,
+  walkAxes:  { x: number; z: number },
+  yawFwd:    THREE.Vector3,
+  yawRight:  THREE.Vector3,
+  jumping:   boolean,
+  onGround:  boolean,
+  dt:        number,
+): void {
+  // Horizontal: direct velocity set for responsive feel
+  const h = yawRight.clone().multiplyScalar(walkAxes.x)
+              .add(yawFwd.clone().multiplyScalar(walkAxes.z));
+  if (h.length() > 0) h.normalize();
+  state.vel.x = h.x * BREACH_WALK_SPEED;
+  state.vel.z = h.z * BREACH_WALK_SPEED;
+
+  // Vertical: gravity + jump impulse
+  if (jumping && onGround) {
+    state.vel.y = BREACH_JUMP_SPEED;
+  }
+  state.vel.y += BREACH_GRAVITY * dt;
+
+  state.pos.addScaledVector(state.vel, dt);
+}
+
+/**
+ * Clamp player inside breach room AABB, leaving the portal face open.
+ *
+ * @param openAxis  - which axis the portal faces ('x', 'y', or 'z')
+ * @param openSign  - 1 = open on positive side, -1 = open on negative side
+ */
+export function clampBreachRoom(
+  state:    PhysicsState,
+  center:   THREE.Vector3,
+  openAxis: 'x' | 'y' | 'z',
+  openSign: 1 | -1,
+): void {
+  const half = {
+    x: BREACH_ROOM_W / 2 - PLAYER_RADIUS,
+    y: BREACH_ROOM_H / 2 - PLAYER_RADIUS,
+    z: BREACH_ROOM_D / 2 - PLAYER_RADIUS,
+  };
+
+  for (const ax of ['x', 'y', 'z'] as const) {
+    const lo = center[ax] - half[ax];
+    const hi = center[ax] + half[ax];
+
+    // Skip the open (portal-facing) side so player can exit into arena
+    if (ax === openAxis && openSign === 1 && state.pos[ax] > hi) continue;
+    if (ax === openAxis && openSign === -1 && state.pos[ax] < lo) continue;
+
+    if (state.pos[ax] < lo) {
+      state.pos[ax] = lo;
+      if (state.vel[ax] < 0) state.vel[ax] = 0;
+    }
+    if (state.pos[ax] > hi) {
+      state.pos[ax] = hi;
+      if (state.vel[ax] > 0) state.vel[ax] = 0;
+    }
+  }
+
+  // Hard floor: absolute stop
+  const floor = center.y - half.y;
+  if (state.pos.y <= floor) {
+    state.pos.y = floor;
+    if (state.vel.y < 0) state.vel.y = 0;
+  }
+}
+```
+
+=== client/src/arena/bar.ts ===
+Create this new file:
+```typescript
+import * as THREE from 'three';
+import { BAR_RADIUS, BAR_LENGTH } from '../../../shared/constants';
+import { makeBarMaterial } from '../render/materials';
+
+export class BarObject {
+  private mesh:      THREE.Mesh;
+  private worldPos:  THREE.Vector3;
+  private pulseTime  = 0;
+
+  public constructor(
+    private scene: THREE.Scene,
+    worldPos:      THREE.Vector3,
+    normal:        { x: number; y: number; z: number },
+  ) {
+    this.worldPos = worldPos.clone();
+
+    const geo  = new THREE.CylinderGeometry(BAR_RADIUS, BAR_RADIUS, BAR_LENGTH, 8);
+    this.mesh  = new THREE.Mesh(geo, makeBarMaterial());
+
+    // Orient cylinder along the surface normal (default cylinder axis is Y)
+    const up  = new THREE.Vector3(0, 1, 0);
+    const n   = new THREE.Vector3(normal.x, normal.y, normal.z).normalize();
+    // Avoid degenerate quaternion when normal is exactly Y or -Y
+    if (Math.abs(n.dot(up)) < 0.999) {
+      this.mesh.quaternion.setFromUnitVectors(up, n);
+    } else if (n.y < 0) {
+      this.mesh.rotateZ(Math.PI);
+    }
+
+    this.mesh.position.copy(worldPos);
+    scene.add(this.mesh);
+  }
+
+  public getWorldPosition(): THREE.Vector3 {
+    return this.worldPos.clone();
+  }
+
+  /** Call once per frame to animate the pulsing emissive glow. */
+  public update(dt: number): void {
+    this.pulseTime += dt;
+    const mat = this.mesh.material as THREE.MeshStandardMaterial;
+    mat.emissiveIntensity = 0.15 + 0.45 * Math.abs(Math.sin(this.pulseTime * 3.0));
+  }
+
+  public dispose(): void {
+    this.scene.remove(this.mesh);
+    this.mesh.geometry.dispose();
+    (this.mesh.material as THREE.Material).dispose();
+  }
+}
+```
+
+=== client/src/arena/states.ts ===
+Replace the entire file with:
+```typescript
+import {
+  ARENA_SIZE,
+  BARS_PER_OBS_MIN,
+  BARS_PER_OBS_MAX,
+  OBSTACLE_MIN,
+  OBSTACLE_MAX,
+} from '../../../shared/constants';
+import type { ObstacleNetDef, BarDef } from '../../../shared/schema';
+
+// ── Legacy preset types (kept for reference) ──────────────────────
+
+interface ObstacleDef { pos: [number, number, number]; size: [number, number, number]; }
+interface GoalDef     { axis: 'x' | 'y' | 'z'; sign: 1 | -1; team: 0 | 1; }
+interface ArenaConfig { id: 'A' | 'B' | 'C'; goals: [GoalDef, GoalDef]; obstacles: ObstacleDef[]; }
+
+export const STATE_A: ArenaConfig = {
+  id: 'A',
+  goals: [{ axis: 'z', sign: -1, team: 0 }, { axis: 'z', sign: 1, team: 1 }],
+  obstacles: [
+    { pos: [0,0,0], size: [16,1,1] }, { pos: [0,0,0], size: [1,16,1] },
+    { pos: [8,8,0], size: [3,3,1] }, { pos: [-8,-8,0], size: [3,3,1] },
+    { pos: [8,-8,0], size: [3,3,1] }, { pos: [-8,8,0], size: [3,3,1] },
+  ],
+};
+
+export const STATE_B: ArenaConfig = {
+  id: 'B',
+  goals: [{ axis: 'y', sign: -1, team: 0 }, { axis: 'y', sign: 1, team: 1 }],
+  obstacles: [
+    { pos: [10,0,10], size: [1,12,1] }, { pos: [-10,0,10], size: [1,12,1] },
+    { pos: [10,0,-10], size: [1,12,1] }, { pos: [-10,0,-10], size: [1,12,1] },
+  ],
+};
+
+export const STATE_C: ArenaConfig = {
+  id: 'C',
+  goals: [{ axis: 'x', sign: -1, team: 0 }, { axis: 'x', sign: 1, team: 1 }],
+  obstacles: [
+    { pos: [0,8,8], size: [1,10,10] }, { pos: [0,-8,-8], size: [1,10,10] },
+    { pos: [0,8,-8], size: [1,10,10] }, { pos: [0,-8,8], size: [1,10,10] },
+  ],
+};
+
+export const ARENA_STATES: Record<string, ArenaConfig> = { A: STATE_A, B: STATE_B, C: STATE_C };
+
+// ── Generated layout types ─────────────────────────────────────────
+
+export interface GeneratedLayout {
+  obstacles:  ObstacleNetDef[];
+  goalAxis:   'x' | 'y' | 'z';
+  goalSigns:  { team0: 1 | -1; team1: 1 | -1 };
+  seed:       number;
+}
+
+// ── Mulberry32 seeded RNG ──────────────────────────────────────────
+function mulberry32(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s += 0x6d2b79f5;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pick<T>(rng: () => number, arr: T[]): T {
+  return arr[Math.floor(rng() * arr.length)];
+}
+
+// Obstacle archetypes: [sizeX, sizeY, sizeZ]
+const ARCHETYPES: Record<string, [number, number, number][]> = {
+  box:   [[3,3,3], [5,5,5], [7,7,7]],
+  plate: [[10,1,6], [8,1,8], [6,1,10], [12,1,5]],
+  beam:  [[1,1,10], [1,10,1], [10,1,1], [1,1,14], [14,1,1]],
+};
+
+/** Generate bar attachment points on obstacle surfaces. */
+function generateBars(rng: () => number, size: [number, number, number], count: number): BarDef[] {
+  const faces: { axis: 'x'|'y'|'z'; sign: 1|-1 }[] = [
+    { axis:'x', sign:1 }, { axis:'x', sign:-1 },
+    { axis:'y', sign:1 }, { axis:'y', sign:-1 },
+    { axis:'z', sign:1 }, { axis:'z', sign:-1 },
+  ];
+
+  // Shuffle and pick `count` faces
+  const shuffled = faces.sort(() => rng() - 0.5).slice(0, count);
+  const half = { x: size[0]/2, y: size[1]/2, z: size[2]/2 } as Record<string, number>;
+
+  return shuffled.map(({ axis, sign }): BarDef => {
+    const lp = { x: 0, y: 0, z: 0 } as Record<string, number>;
+    lp[axis] = sign * (half[axis] + 0.15);  // just outside the surface
+    const norm = { x: 0, y: 0, z: 0 } as Record<string, number>;
+    norm[axis] = sign;
+    return {
+      localPos: { x: lp.x, y: lp.y, z: lp.z },
+      normal:   { x: norm.x, y: norm.y, z: norm.z },
+    };
+  });
+}
+
+/**
+ * Procedurally generate a random arena layout.
+ * Half the obstacles are mirrored on the goalAxis for symmetry.
+ * Safe zone: obstacles avoid ±(ARENA_SIZE/2 - 6) on the goalAxis (keeps portal lanes clear).
+ */
+export function generateArenaLayout(seed = Date.now()): GeneratedLayout {
+  const rng      = mulberry32(seed);
+  const goalAxis = pick(rng, ['x', 'y', 'z'] as const);
+  const count    = OBSTACLE_MIN + Math.floor(rng() * (OBSTACLE_MAX - OBSTACLE_MIN + 1));
+  const half     = Math.floor(count / 2);
+
+  const safeLimit    = ARENA_SIZE / 2 - 7;   // stay this many units from portal faces
+  const placementMax = ARENA_SIZE / 2 - 5;   // stay inside arena
+
+  const obstacles: ObstacleNetDef[] = [];
+
+  for (let i = 0; i < half; i++) {
+    const archetypeName = pick(rng, Object.keys(ARCHETYPES));
+    const sizeArr       = pick(rng, ARCHETYPES[archetypeName]) as [number,number,number];
+
+    // Random position — avoid safe zone on goalAxis
+    const pos = { x: 0, y: 0, z: 0 } as Record<string, number>;
+    for (const ax of ['x', 'y', 'z'] as const) {
+      if (ax === goalAxis) {
+        // Place away from portal faces
+        let v = 0;
+        do { v = (rng() * 2 - 1) * safeLimit; } while (Math.abs(v) > safeLimit * 0.85);
+        pos[ax] = v;
+      } else {
+        pos[ax] = (rng() * 2 - 1) * placementMax;
+      }
+    }
+
+    const barCount = BARS_PER_OBS_MIN + Math.floor(rng() * (BARS_PER_OBS_MAX - BARS_PER_OBS_MIN + 1));
+    const bars     = generateBars(rng, sizeArr, barCount);
+
+    const obs: ObstacleNetDef = {
+      pos:       { x: pos.x, y: pos.y, z: pos.z },
+      size:      { x: sizeArr[0], y: sizeArr[1], z: sizeArr[2] },
+      archetype: archetypeName as 'box' | 'plate' | 'beam',
+      bars,
+    };
+
+    // Mirror: flip position on goalAxis for team symmetry
+    const mirrorPos = { ...obs.pos } as Record<string, number>;
+    mirrorPos[goalAxis] *= -1;
+
+    const mirrorBars = bars.map(b => ({
+      localPos: { ...b.localPos, [goalAxis]: -b.localPos[goalAxis as keyof typeof b.localPos] },
+      normal:   { ...b.normal,   [goalAxis]: -b.normal[goalAxis as keyof typeof b.normal] },
+    }));
+
+    obstacles.push(obs);
+    obstacles.push({ ...obs, pos: { x: mirrorPos.x, y: mirrorPos.y, z: mirrorPos.z }, bars: mirrorBars });
+  }
+
+  return {
+    obstacles,
+    goalAxis,
+    goalSigns: { team0: -1, team1: 1 },
+    seed,
+  };
+}
+```
+
+=== client/src/render/materials.ts ===
+Replace the entire file with:
+```typescript
+import * as THREE from 'three';
+
+export function makeArenaMaterial(): THREE.LineBasicMaterial {
+  return new THREE.LineBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.6 });
+}
+
+export function makeObstacleMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: 0x2a3a4a, metalness: 0.3, roughness: 0.7 });
+}
+
+export function makeGoalMaterial(team: 0 | 1): THREE.MeshStandardMaterial {
+  const color    = team === 0 ? 0x004444 : 0x440044;
+  const emissive = team === 0 ? 0x00ffff  : 0xff00ff;
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive,
+    emissiveIntensity: 0.8,
+    side:              THREE.DoubleSide,
+    transparent:       true,
+    opacity:           0.5,
+  });
+}
+
+export function makePlayerMaterial(team: 0 | 1): THREE.MeshStandardMaterial {
+  const color = team === 0 ? 0x00ffff : 0xff00ff;
+  return new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4 });
+}
+
+export function makeGhostMaterial(team: 0 | 1): THREE.MeshStandardMaterial {
+  const color = team === 0 ? 0x00ffff : 0xff00ff;
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive:          color,
+    emissiveIntensity: 0.15,
+    transparent:       true,
+    opacity:           0.3,
+  });
+}
+
+export function makeBreachRoomMaterial(team: 0 | 1): THREE.MeshStandardMaterial {
+  const color = team === 0 ? 0x002233 : 0x220033;
+  return new THREE.MeshStandardMaterial({
+    color,
+    side:        THREE.DoubleSide,
+    transparent: true,
+    opacity:     0.55,
+  });
+}
+
+export function makeBarMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color:             0xff9900,
+    emissive:          0xff6600,
+    emissiveIntensity: 0.2,
+    metalness:         0.9,
+    roughness:         0.1,
+  });
+}
+```
+
+All four files must compile together. Do not touch any other files.

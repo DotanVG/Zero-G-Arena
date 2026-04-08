@@ -1,0 +1,445 @@
+Implement batch 4 of the Orbital Breach overhaul: rewrite client/src/player.ts completely. Do NOT touch any other files.
+
+=== client/src/player.ts ===
+Replace the entire file with the following TypeScript. It must compile cleanly against the already-updated files (physics.ts, camera.ts, input.ts, arena/arena.ts, render/materials.ts, shared/constants.ts, shared/schema.ts).
+
+```typescript
+import * as THREE from 'three';
+import {
+  MAX_LAUNCH_SPEED,
+  LEGS_HIT_LAUNCH_FACTOR,
+  LAUNCH_AIM_SENSITIVITY,
+  GRAB_RADIUS,
+  PLAYER_RADIUS,
+  RESPAWN_TIME,
+} from '../../shared/constants';
+import { clamp } from './util/math';
+import { type DamageState, type PlayerPhase } from '../../shared/schema';
+import { CameraController } from './camera';
+import { InputManager } from './input';
+import {
+  type PhysicsState,
+  integrateZeroG,
+  integrateBreachRoom,
+  clampBreachRoom,
+  bounceArena,
+} from './physics';
+import { Arena } from './arena/arena';
+import { makePlayerMaterial } from './render/materials';
+
+export type HitZone = 'head' | 'body' | 'rightArm' | 'leftArm' | 'legs';
+
+export class LocalPlayer {
+  // ── Physics ───────────────────────────────────────────────────────
+  public phys: PhysicsState = {
+    pos: new THREE.Vector3(0, 0, -15),
+    vel: new THREE.Vector3(),
+  };
+
+  // ── State ─────────────────────────────────────────────────────────
+  public phase:         PlayerPhase = 'BREACH';
+  public team:          0 | 1       = 0;
+  public kills          = 0;    // breaches scored
+  public deaths         = 0;    // times frozen
+
+  // Damage flags (persistent per round)
+  public damage: DamageState = {
+    frozen:   false,
+    rightArm: false,
+    leftArm:  false,
+    legs:     false,
+  };
+
+  // ── Launch / grab ─────────────────────────────────────────────────
+  public launchPower     = 0;
+  public grabbedBarPos:  THREE.Vector3 | null = null;
+
+  // ── Respawn ───────────────────────────────────────────────────────
+  private respawnTimer   = 0;
+
+  // ── Breach room ground detection ───────────────────────────────────
+  private onGround       = false;
+
+  // ── Three.js ─────────────────────────────────────────────────────
+  private mesh:          THREE.Mesh;
+  private arrowLine:     THREE.Line | null = null;
+  private arrowPositions: Float32Array | null = null;
+  private readonly scene: THREE.Scene;
+
+  // ── Callbacks ─────────────────────────────────────────────────────
+  /** Called when this player breaches the enemy portal while unfrozen */
+  public onRoundWin: ((team: 0 | 1) => void) | null = null;
+
+  public constructor(scene: THREE.Scene) {
+    this.scene = scene;
+    this.mesh  = new THREE.Mesh(
+      new THREE.SphereGeometry(PLAYER_RADIUS, 12, 8),
+      makePlayerMaterial(0),
+    );
+    scene.add(this.mesh);
+  }
+
+  // ── Capability checks ─────────────────────────────────────────────
+
+  public canGrabBar(): boolean {
+    return !this.damage.frozen && !this.damage.leftArm;
+  }
+
+  public canFire(): boolean {
+    return !this.damage.frozen && !this.damage.rightArm;
+  }
+
+  public maxLaunchPower(): number {
+    return this.damage.legs
+      ? MAX_LAUNCH_SPEED * LEGS_HIT_LAUNCH_FACTOR
+      : MAX_LAUNCH_SPEED;
+  }
+
+  // ── Main update ───────────────────────────────────────────────────
+
+  public update(
+    input: InputManager,
+    cam:   CameraController,
+    arena: Arena,
+    dt:    number,
+  ): void {
+    switch (this.phase) {
+      case 'FROZEN':     this.updateFrozen(arena, dt);              break;
+      case 'BREACH':     this.updateBreach(input, cam, arena, dt);  break;
+      case 'FLOATING':   this.updateFloating(input, cam, arena, dt);break;
+      case 'GRABBING':   this.updateGrabbing(input, cam, dt);       break;
+      case 'AIMING':     this.updateAiming(input, cam, arena, dt);  break;
+      case 'RESPAWNING': this.updateRespawning(arena, dt);          break;
+    }
+    this.mesh.position.copy(this.phys.pos);
+  }
+
+  // ── FROZEN ────────────────────────────────────────────────────────
+
+  private updateFrozen(arena: Arena, dt: number): void {
+    // Drift forever — no input, no state transitions (permanent until round reset)
+    integrateZeroG(this.phys, dt);
+    bounceArena(this.phys);
+    arena.bounceObstacles(this.phys);
+  }
+
+  // ── BREACH ────────────────────────────────────────────────────────
+
+  private updateBreach(
+    input: InputManager,
+    cam:   CameraController,
+    arena: Arena,
+    dt:    number,
+  ): void {
+    const center    = arena.getBreachRoomCenter(this.team);
+    const openAxis  = arena.getBreachOpenAxis(this.team);
+    const openSign  = arena.getBreachOpenSign(this.team);
+
+    // Ground detection: is the player touching the floor?
+    const floorY    = center.y - BREACH_ROOM_H_HALF();
+    this.onGround   = this.phys.pos.y <= floorY + 0.08;
+
+    integrateBreachRoom(
+      this.phys,
+      input.getWalkAxes(),
+      cam.getYawForward(),
+      cam.getYawRight(),
+      input.isJumping(),
+      this.onGround,
+      dt,
+    );
+
+    clampBreachRoom(this.phys, center, openAxis, openSign);
+
+    // Grab bar if available and arm is functional
+    const nearBar = arena.getNearestBar(this.phys.pos, GRAB_RADIUS);
+    if (nearBar && input.isGrab() && this.canGrabBar()) {
+      this.grabBar(nearBar);
+      return;
+    }
+
+    // Transition: player walked/jumped through the portal into the arena
+    if (!arena.isInBreachRoom(this.phys.pos, this.team)) {
+      this.phase = 'FLOATING';
+    }
+  }
+
+  // ── FLOATING ──────────────────────────────────────────────────────
+
+  private updateFloating(
+    input: InputManager,
+    cam:   CameraController,
+    arena: Arena,
+    dt:    number,
+  ): void {
+    integrateZeroG(this.phys, dt);
+    bounceArena(this.phys);
+    arena.bounceObstacles(this.phys);
+
+    // Return to own breach room
+    if (arena.isInBreachRoom(this.phys.pos, this.team)) {
+      this.phase       = 'BREACH';
+      this.phys.vel.y  = 0;
+      return;
+    }
+
+    // Goal scoring — ONLY unfrozen FLOATING players can score
+    if (!this.damage.frozen) {
+      for (const goal of arena.getGoalPlanes()) {
+        if (goal.checkEntry(this.phys.pos, this.team)) {
+          this.kills++;
+          this.onRoundWin?.(this.team);
+          return;
+        }
+      }
+    }
+
+    // Grab bar
+    const nearBar = arena.getNearestBar(this.phys.pos, GRAB_RADIUS);
+    if (nearBar && input.isGrab() && this.canGrabBar()) {
+      this.grabBar(nearBar);
+    }
+  }
+
+  // ── GRABBING ─────────────────────────────────────────────────────
+
+  private updateGrabbing(
+    input: InputManager,
+    _cam:  CameraController,
+    dt:    number,
+  ): void {
+    if (!this.grabbedBarPos) { this.phase = 'FLOATING'; return; }
+
+    // Snap toward bar
+    this.phys.pos.lerp(this.grabbedBarPos, 1 - Math.pow(0.002, dt));
+    this.phys.vel.set(0, 0, 0);
+
+    // Begin aiming when Space is held (and arm works)
+    if (input.isAiming()) {
+      this.phase       = 'AIMING';
+      this.launchPower = 0;
+    }
+  }
+
+  // ── AIMING ────────────────────────────────────────────────────────
+
+  private updateAiming(
+    input: InputManager,
+    cam:   CameraController,
+    arena: Arena,
+    dt:    number,
+  ): void {
+    if (!this.grabbedBarPos) { this.phase = 'FLOATING'; return; }
+
+    // Stay locked to bar
+    this.phys.pos.lerp(this.grabbedBarPos, 1 - Math.pow(0.002, dt));
+    this.phys.vel.set(0, 0, 0);
+
+    // Mouse Y (via aimDy) controls power
+    // consumeAimDelta() returns positive dy when mouse moves DOWN → more power
+    const { dy } = input.consumeAimDelta();
+    this.launchPower += dy * LAUNCH_AIM_SENSITIVITY;
+    this.launchPower  = clamp(this.launchPower, 0, this.maxLaunchPower());
+
+    this.updateArrow(cam.getForward());
+
+    // Release Space → launch
+    if (!input.isAiming()) {
+      this.launch(cam);
+    }
+  }
+
+  // ── RESPAWNING ────────────────────────────────────────────────────
+
+  private updateRespawning(arena: Arena, dt: number): void {
+    this.respawnTimer -= dt;
+    if (this.respawnTimer <= 0) {
+      this.respawnTimer = 0;
+      const center      = arena.getBreachRoomCenter(this.team);
+      const floorY      = center.y - BREACH_ROOM_H_HALF() + PLAYER_RADIUS + 0.1;
+      this.phys.pos.set(center.x, floorY, center.z);
+      this.phys.vel.set(0, 0, 0);
+      this.phase        = 'BREACH';
+    }
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────
+
+  private grabBar(barPos: THREE.Vector3): void {
+    this.grabbedBarPos = barPos.clone();
+    this.phys.vel.set(0, 0, 0);
+    this.phase         = 'GRABBING';
+    this.hideArrow();
+  }
+
+  private launch(cam: CameraController): void {
+    const fwd = cam.getForward();
+    this.phys.vel.copy(fwd).multiplyScalar(this.launchPower);
+    this.launchPower    = 0;
+    this.grabbedBarPos  = null;
+    this.phase          = 'FLOATING';
+    this.hideArrow();
+  }
+
+  // ── Launch arrow visualization ────────────────────────────────────
+
+  private ensureArrow(): void {
+    if (this.arrowLine) return;
+
+    const POINTS       = 20;
+    this.arrowPositions = new Float32Array(POINTS * 3);
+
+    const geo          = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.arrowPositions, 3));
+
+    // Vertex colors: white at root → team colour at tip
+    const colors       = new Float32Array(POINTS * 3);
+    const tipColor     = this.team === 0
+      ? new THREE.Color(0x00ffff)
+      : new THREE.Color(0xff00ff);
+    for (let i = 0; i < POINTS; i++) {
+      const t   = i / (POINTS - 1);
+      const col = new THREE.Color().lerpColors(new THREE.Color(0xffffff), tipColor, t);
+      colors[i * 3]     = col.r;
+      colors[i * 3 + 1] = col.g;
+      colors[i * 3 + 2] = col.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const mat          = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent:  true,
+      opacity:      0.8,
+    });
+
+    this.arrowLine = new THREE.Line(geo, mat);
+    this.scene.add(this.arrowLine);
+  }
+
+  private updateArrow(forward: THREE.Vector3): void {
+    this.ensureArrow();
+    const line         = this.arrowLine!;
+    const positions    = this.arrowPositions!;
+    const POINTS       = 20;
+    const maxLen       = 18;
+    const scale        = this.launchPower / (this.maxLaunchPower() || 1);
+
+    for (let i = 0; i < POINTS; i++) {
+      const t  = (i / (POINTS - 1)) * scale * maxLen;
+      const pt = this.phys.pos.clone().addScaledVector(forward, t);
+      positions[i * 3]     = pt.x;
+      positions[i * 3 + 1] = pt.y;
+      positions[i * 3 + 2] = pt.z;
+    }
+
+    (line.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    line.visible = true;
+
+    // Pulsing opacity
+    const pulse        = 0.35 + 0.65 * Math.abs(Math.sin(Date.now() * 0.005));
+    (line.material as THREE.LineBasicMaterial).opacity = pulse;
+  }
+
+  private hideArrow(): void {
+    if (this.arrowLine) this.arrowLine.visible = false;
+  }
+
+  // ── Hit system ───────────────────────────────────────────────────
+
+  /**
+   * Apply a hit. Head/body = permanent freeze. Limbs = partial disable.
+   * All hits apply an impulse push.
+   */
+  public applyHit(zone: HitZone, impulse: THREE.Vector3): void {
+    this.phys.vel.add(impulse);
+
+    switch (zone) {
+      case 'head':
+      case 'body':
+        if (!this.damage.frozen) {
+          this.damage.frozen = true;
+          this.deaths++;
+        }
+        this.phase = 'FROZEN';
+        this.grabbedBarPos = null;
+        this.hideArrow();
+        break;
+      case 'rightArm':
+        this.damage.rightArm = true;
+        break;
+      case 'leftArm':
+        this.damage.leftArm = true;
+        // If currently grabbing, release
+        if (this.phase === 'GRABBING' || this.phase === 'AIMING') {
+          this.phase = 'FLOATING';
+          this.grabbedBarPos = null;
+          this.hideArrow();
+        }
+        break;
+      case 'legs':
+        this.damage.legs = true;
+        // Clamp existing launchPower to new max
+        this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
+        break;
+    }
+  }
+
+  /**
+   * Classify which hit zone was struck based on impact point relative to player.
+   * @param impactPoint  - world-space point on the player sphere
+   * @param playerFacing - normalised forward vector of the target player
+   */
+  public static classifyHitZone(
+    impactPoint:   THREE.Vector3,
+    playerPos:     THREE.Vector3,
+    playerFacing:  THREE.Vector3,
+  ): HitZone {
+    const local = impactPoint.clone().sub(playerPos);
+    const yRel  = local.y / PLAYER_RADIUS;   // -1 (feet) → +1 (head)
+
+    if (yRel > 0.55) return 'head';
+    if (yRel > -0.2) {
+      // Body/arm zone — determine side by projection onto player's right vector
+      const worldUp  = new THREE.Vector3(0, 1, 0);
+      const right    = new THREE.Vector3().crossVectors(playerFacing, worldUp).normalize();
+      const xProj    = local.dot(right);
+      if (xProj >  0.4) return 'rightArm';
+      if (xProj < -0.4) return 'leftArm';
+      return 'body';
+    }
+    return 'legs';
+  }
+
+  // ── Round management ──────────────────────────────────────────────
+
+  /** Reset damage flags and physics state for a new round. */
+  public resetForNewRound(arena: Arena): void {
+    this.damage     = { frozen: false, rightArm: false, leftArm: false, legs: false };
+    this.launchPower = 0;
+    this.grabbedBarPos = null;
+    this.hideArrow();
+    this.phys.vel.set(0, 0, 0);
+
+    const center = arena.getBreachRoomCenter(this.team);
+    const floorY = center.y - BREACH_ROOM_H_HALF() + PLAYER_RADIUS + 0.1;
+    this.phys.pos.set(center.x, floorY, center.z);
+    this.phase   = 'BREACH';
+  }
+
+  // ── Accessors ────────────────────────────────────────────────────
+
+  public getPosition():    THREE.Vector3 { return this.phys.pos; }
+  public getMesh():        THREE.Mesh    { return this.mesh; }
+  public getScore():       number        { return this.kills; }
+  /** @deprecated kept for legacy HUD call site — returns kills count */
+  public getFrozenTimer(): number        { return 0; }
+}
+
+// Helper: half-height of breach room (to avoid importing constants at module level)
+function BREACH_ROOM_H_HALF(): number {
+  // BREACH_ROOM_H = 6
+  return 3;
+}
+```
+
+Do not modify any other file.

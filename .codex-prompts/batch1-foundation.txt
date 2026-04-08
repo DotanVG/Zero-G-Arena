@@ -1,0 +1,371 @@
+Implement the foundation layer for Orbital Breach mechanics overhaul. Modify these 4 files exactly as specified. Do NOT touch any other files.
+
+=== shared/constants.ts ===
+Replace the entire file with:
+```typescript
+export const ARENA_SIZE             = 40;
+export const PLAYER_RADIUS          = 0.8;
+export const TICK_RATE              = 20;
+export const FREEZE_TIME            = 2.0;    // kept for server compat
+export const RESPAWN_TIME           = 2.0;
+export const INVULN_TIME            = 0.5;
+export const FIRE_RATE              = 6;
+
+// Zero-G / Launch
+export const MAX_LAUNCH_SPEED       = 20;
+export const LEGS_HIT_LAUNCH_FACTOR = 2 / 3;
+export const ZERO_G_DAMPING         = 0.9995;
+export const GRAB_RADIUS            = 2.0;
+export const LAUNCH_AIM_SENSITIVITY = 0.05;
+
+// Bars
+export const BAR_RADIUS             = 0.1;
+export const BAR_LENGTH             = 1.5;
+export const BARS_PER_OBS_MIN       = 1;
+export const BARS_PER_OBS_MAX       = 3;
+
+// Breach room
+export const BREACH_ROOM_W          = 8;
+export const BREACH_ROOM_H          = 6;
+export const BREACH_ROOM_D          = 6;
+export const BREACH_GRAVITY         = -12;
+export const BREACH_JUMP_SPEED      = 7;
+export const BREACH_WALK_SPEED      = 6;
+
+// Game flow
+export const COUNTDOWN_SECONDS      = 10;
+export const ROUND_END_DELAY        = 5;     // seconds before new round starts
+
+// Obstacles
+export const OBSTACLE_MIN           = 8;
+export const OBSTACLE_MAX           = 14;
+
+// Legacy (kept for server sim — no longer used by client physics)
+export const ACCEL                  = 18;
+export const MAX_SPEED              = 16;
+export const DAMPING                = 0.92;
+export const BOOST                  = 10;
+```
+
+=== shared/schema.ts ===
+Replace the entire file with:
+```typescript
+// --- Shared vector types ---
+export interface Vec3 { x: number; y: number; z: number; }
+
+// --- Damage state (persistent per round) ---
+export interface DamageState {
+  frozen:   boolean;   // head or body hit — permanent for round, player drifts
+  rightArm: boolean;   // can't fire pistol
+  leftArm:  boolean;   // can't grab bars
+  legs:     boolean;   // max launch power capped at 2/3
+}
+
+// --- Arena state ---
+export type ArenaStateId = string; // 'A'|'B'|'C' legacy OR dynamic seed string
+
+// --- Obstacle / bar layout (for random generation + network sync) ---
+export interface BarDef {
+  localPos: Vec3;   // offset from parent obstacle centre
+  normal:   Vec3;   // outward face normal
+}
+
+export interface ObstacleNetDef {
+  pos:       Vec3;
+  size:      Vec3;
+  archetype: 'box' | 'plate' | 'beam';
+  bars:      BarDef[];
+}
+
+// --- Player network state ---
+export type PlayerPhase =
+  | 'BREACH'      // in breach room, gravity active
+  | 'FLOATING'    // in arena, zero-G drift
+  | 'GRABBING'    // clamped to a bar, vel=0
+  | 'AIMING'      // holding Space while grabbing, charging launch
+  | 'FROZEN'      // head/body hit — permanent this round, drifts physics only
+  | 'RESPAWNING'; // waiting to re-enter breach room
+
+export interface PlayerNetState {
+  id:        string;
+  name:      string;
+  team:      0 | 1;
+  pos:       Vec3;
+  vel:       Vec3;
+  rot:       { yaw: number; pitch: number };
+  phase:     PlayerPhase;
+  damage:    DamageState;
+  ping:      number;
+  kills:     number;   // breaches scored
+  deaths:    number;   // times frozen
+  connected: boolean;  // false = ghost body (disconnected player still floating)
+}
+
+// --- Score ---
+export interface ScoreState { team0: number; team1: number; }
+
+// --- Server → Client ---
+export type GamePhase = 'LOBBY' | 'COUNTDOWN' | 'PLAYING' | 'ROUND_END';
+
+export interface ServerStateMsg {
+  t:          'state';
+  seq:        number;
+  players:    PlayerNetState[];
+  score:      ScoreState;
+  arenaState: ArenaStateId;
+  phase:      GamePhase;
+  countdown?: number;
+}
+
+export interface ArenaLayoutMsg {
+  t:          'layout';
+  obstacles:  ObstacleNetDef[];
+  goalAxis:   'x' | 'y' | 'z';
+  goalSigns:  { team0: 1 | -1; team1: 1 | -1 };
+  seed:       number;
+}
+
+export interface RoundEndMsg {
+  t:            'roundEnd';
+  winningTeam:  0 | 1;
+  scorerId:     string;
+}
+
+// --- Tab scoreboard ---
+export interface FullPlayerInfo {
+  id:     string;
+  name:   string;
+  frozen: boolean;   // own team only — visible to teammates
+  kills:  number;
+  deaths: number;
+  ping:   number;
+}
+
+export interface EnemyPlayerInfo {
+  id:     string;
+  name:   string;
+  // frozen is intentionally OMITTED — info asymmetry by design
+  kills:  number;
+  deaths: number;
+  ping:   number;
+}
+
+export interface TabListMsg {
+  t:         'tabList';
+  ownTeam:   FullPlayerInfo[];
+  enemyTeam: EnemyPlayerInfo[];
+}
+
+export interface ServerEventMsg {
+  t:    'event';
+  type: 'hit' | 'score' | 'spawn' | 'roundEnd';
+  data: unknown;
+}
+
+// --- Client → Server ---
+export interface ClientInputMsg {
+  t:          'input';
+  id:         string;
+  seq:        number;
+  walkAxes:   { x: number; z: number };  // replaces old axes (no y thrust in arena)
+  grab:       boolean;
+  aiming:     boolean;
+  launchPower?: number;
+  fire:       boolean;
+  rot:        { yaw: number; pitch: number };
+  phase:      PlayerPhase;
+}
+
+export interface ClientJoinMsg {
+  t:    'join';
+  name: string;
+}
+
+export type ClientMessage = ClientInputMsg | ClientJoinMsg;
+```
+
+=== client/src/camera.ts ===
+Replace the entire file with:
+```typescript
+import * as THREE from 'three';
+import { clamp } from './util/math';
+
+export class CameraController {
+  private yaw   = 0;
+  private pitch = 0;
+
+  public constructor(private camera: THREE.PerspectiveCamera) {}
+
+  /**
+   * Apply mouse delta to yaw/pitch.
+   * Mouse X always controls yaw.
+   * Mouse Y controls pitch (camera tilt) — when InputManager is in aiming mode,
+   * it routes movementY to aimDy instead of mouseDy, so dy will be 0 here.
+   */
+  public applyMouseDelta(dx: number, dy: number, sensitivity: number): void {
+    this.yaw   -= dx * sensitivity;
+    this.pitch -= dy * sensitivity;
+    this.pitch  = clamp(this.pitch, (-Math.PI * 89) / 180, (Math.PI * 89) / 180);
+  }
+
+  public getQuaternion(): THREE.Quaternion {
+    const qYaw   = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+    const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitch);
+    return qYaw.multiply(qPitch);
+  }
+
+  /** Full 3D forward (includes pitch) — used for launch direction */
+  public getForward(): THREE.Vector3 {
+    return new THREE.Vector3(0, 0, -1).applyQuaternion(this.getQuaternion());
+  }
+
+  public getRight(): THREE.Vector3 {
+    return new THREE.Vector3(1, 0, 0).applyQuaternion(this.getQuaternion());
+  }
+
+  public getUp(): THREE.Vector3 {
+    return new THREE.Vector3(0, 1, 0).applyQuaternion(this.getQuaternion());
+  }
+
+  /** Yaw-only forward projected onto XZ plane — used for breach room walking */
+  public getYawForward(): THREE.Vector3 {
+    return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+  }
+
+  /** Yaw-only right projected onto XZ plane — used for breach room walking */
+  public getYawRight(): THREE.Vector3 {
+    return new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+  }
+
+  public apply(position: THREE.Vector3): void {
+    this.camera.position.copy(position);
+    this.camera.quaternion.copy(this.getQuaternion());
+  }
+
+  public getYaw(): number   { return this.yaw; }
+  public getPitch(): number { return this.pitch; }
+}
+```
+
+=== client/src/input.ts ===
+Replace the entire file with:
+```typescript
+import { FIRE_RATE } from '../../shared/constants';
+
+export class InputManager {
+  private keys          = new Set<string>();
+  private mouseDx       = 0;
+  private mouseDy       = 0;
+  private aimDy         = 0;         // separate accumulator for aim power (during AIMING phase)
+  private aimingActive  = false;
+  private fireCooldown  = 0;
+
+  public mouseSensitivity = 0.002;
+
+  public constructor() {
+    window.addEventListener('keydown', (e) => {
+      this.keys.add(e.code);
+      // Prevent Tab from switching browser focus
+      if (e.code === 'Tab') e.preventDefault();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!this.isLocked()) return;
+      this.mouseDx += e.movementX;
+      // Route Y delta: aiming mode → power control; otherwise → camera pitch
+      if (this.aimingActive) {
+        this.aimDy += e.movementY;
+      } else {
+        this.mouseDy += e.movementY;
+      }
+    });
+
+    window.addEventListener('mousedown', (e) => {
+      if (e.button === 0) this.keys.add('MouseLeft');
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.keys.delete('MouseLeft');
+    });
+  }
+
+  // ── Aiming mode ──────────────────────────────────────────────────
+  /** Must be called BEFORE consumeMouseDelta() each frame */
+  public setAimingMode(active: boolean): void {
+    this.aimingActive = active;
+  }
+
+  // ── Mouse delta ───────────────────────────────────────────────────
+  public consumeMouseDelta(): { dx: number; dy: number } {
+    const dx = this.mouseDx;
+    const dy = this.mouseDy;
+    this.mouseDx = 0;
+    this.mouseDy = 0;
+    return { dx, dy };
+  }
+
+  /** Power aim delta (mouse Y when in aiming mode). Positive = mouse moved down = more power. */
+  public consumeAimDelta(): { dy: number } {
+    const dy = this.aimDy;
+    this.aimDy = 0;
+    return { dy };
+  }
+
+  // ── Movement ──────────────────────────────────────────────────────
+  /** WASD walk axes (XZ only). Used in breach room. */
+  public getWalkAxes(): { x: number; z: number } {
+    return {
+      x: (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0),
+      z: (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0),
+    };
+  }
+
+  /** @deprecated use getWalkAxes() — kept for server sim compatibility */
+  public getThrustAxes(): { x: number; y: number; z: number } {
+    return {
+      x: (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0),
+      y: (this.keys.has('Space') ? 1 : 0) - (this.keys.has('ControlLeft') ? 1 : 0),
+      z: (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0),
+    };
+  }
+
+  // ── Actions ───────────────────────────────────────────────────────
+  /** Jump — only active in breach room. Space key. */
+  public isJumping(): boolean { return this.keys.has('Space'); }
+
+  /** Grab bar — KeyE. Distinct from jump. */
+  public isGrab(): boolean { return this.keys.has('KeyE'); }
+
+  /**
+   * Aim / launch charge — Space held while GRABBING.
+   * Same key as jump; context determined by player state.
+   */
+  public isAiming(): boolean { return this.keys.has('Space'); }
+
+  /** Fire (LMB). Respects fire rate cooldown. */
+  public updateFireCooldown(dt: number): void { this.fireCooldown -= dt; }
+  public canFire(): boolean {
+    if (this.fireCooldown > 0) return false;
+    this.fireCooldown = 1 / FIRE_RATE;
+    return true;
+  }
+
+  /** Tab key — show scoreboard overlay */
+  public isTabHeld(): boolean { return this.keys.has('Tab'); }
+
+  // ── Pointer lock ──────────────────────────────────────────────────
+  public lockPointer(canvas: HTMLCanvasElement): void {
+    void canvas.requestPointerLock();
+  }
+
+  public isLocked(): boolean {
+    return document.pointerLockElement != null;
+  }
+}
+```
+
+All four files must compile cleanly together. Do not touch any other files.

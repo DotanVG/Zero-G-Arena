@@ -149,7 +149,7 @@ export class Arena {
       addWall(BREACH_ROOM_D, BREACH_ROOM_H, 0, 0, -hw, 0, 0, Math.PI / 2);
       addWall(BREACH_ROOM_D, BREACH_ROOM_H, 0, 0, hw, 0, 0, -Math.PI / 2);
       const backX = openSign * -hd;
-      addWall(BREACH_ROOM_H, BREACH_ROOM_W, backX, 0, 0, 0, openSign === 1 ? Math.PI / 2 : -Math.PI / 2, 0);
+      addWall(BREACH_ROOM_W, BREACH_ROOM_H, backX, 0, 0, 0, openSign === 1 ? Math.PI / 2 : -Math.PI / 2, 0);
     } else {
       // openAxis === 'y'
       addWall(BREACH_ROOM_W, BREACH_ROOM_D, -hw, 0, 0, 0, Math.PI / 2, 0);

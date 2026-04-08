@@ -12,6 +12,7 @@ const FRAME_W = BREACH_ROOM_W;   // 8
 const FRAME_H = BREACH_ROOM_H;   // 6
 const FRAME_T = 0.35;            // frame bar thickness
 const FRAME_D = 0.18;            // frame bar depth
+const FRAME_LAYER_OFFSET = 0.34; // one frame on each side of the door cavity
 const DOOR_D  = 0.4;             // door panel depth (thicker than frame)
 const DOOR_SPEED = 1.2;          // panels travel from closed→open in ~0.83s (easing visible)
 
@@ -42,7 +43,8 @@ export class GoalPlane {
       this.group.rotation.y = config.sign === 1 ? Math.PI : 0;
     }
 
-    this.buildNeonFrame(config.team);
+    this.buildNeonFrame(config.team, -FRAME_LAYER_OFFSET);
+    this.buildNeonFrame(config.team, FRAME_LAYER_OFFSET);
     const [top, bot] = this.buildDoors(config.team);
     this.doorTop    = top;
     this.doorBottom = bot;
@@ -52,7 +54,7 @@ export class GoalPlane {
 
   // ── Neon frame ────────────────────────────────────────────────────
 
-  private buildNeonFrame(team: 0 | 1): void {
+  private buildNeonFrame(team: 0 | 1, zOffset: number): void {
     const fw  = FRAME_W;
     const fh  = FRAME_H;
     const t   = FRAME_T;
@@ -73,13 +75,13 @@ export class GoalPlane {
 
     for (const [sw, sh, sd, px, py, horiz] of segs) {
       // Core — solid neon colour
-      this.group.add(this.makeMesh(sw, sh, sd, px, py, 0,
+      this.group.add(this.makeMesh(sw, sh, sd, px, py, zOffset,
         new THREE.MeshBasicMaterial({ color: col })));
 
       // Inner glow — spreads 2.5× across the bar
       const g1w = horiz ? sw : sw * 2.5;
       const g1h = horiz ? sh * 2.5 : sh;
-      this.group.add(this.makeMesh(g1w, g1h, sd, px, py, 0,
+      this.group.add(this.makeMesh(g1w, g1h, sd, px, py, zOffset,
         new THREE.MeshBasicMaterial({
           color: col, transparent: true, opacity: 0.28,
           blending: THREE.AdditiveBlending, depthWrite: false,
@@ -88,7 +90,7 @@ export class GoalPlane {
       // Outer glow — spreads 5× across the bar (faint halo)
       const g2w = horiz ? sw : sw * 5;
       const g2h = horiz ? sh * 5 : sh;
-      this.group.add(this.makeMesh(g2w, g2h, sd, px, py, 0,
+      this.group.add(this.makeMesh(g2w, g2h, sd, px, py, zOffset,
         new THREE.MeshBasicMaterial({
           color: col, transparent: true, opacity: 0.09,
           blending: THREE.AdditiveBlending, depthWrite: false,
@@ -105,8 +107,8 @@ export class GoalPlane {
     const col      = team === 0 ? 0x001a2e : 0x1a001a;   // dark opaque team colour
     const mat      = () => new THREE.MeshBasicMaterial({ color: col });
 
-    // Slightly in front of the frame (toward breach room) so player sees it
-    const zOff = -0.2;
+    // Keep the sliding panels centered between the two visible frame layers.
+    const zOff = 0;
 
     const top = this.makeMesh(fw, panelH, DOOR_D, 0, fh / 4, zOff, mat());
     this.group.add(top);

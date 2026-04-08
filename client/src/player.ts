@@ -139,7 +139,7 @@ export class LocalPlayer {
       dt,
     );
 
-    clampBreachRoom(this.phys, center, openAxis, openSign);
+    clampBreachRoom(this.phys, center, openAxis, openSign, arena.isGoalDoorOpen(this.currentBreachTeam));
 
     const nearBar = arena.getNearestBar(this.phys.pos, GRAB_RADIUS);
     if (nearBar && input.consumeGrab() && this.canGrabBar()) {
@@ -160,9 +160,15 @@ export class LocalPlayer {
   ): void {
     const goalAxis = arena.getBreachOpenAxis(this.team);
     const perpAxis: 'x' | 'z' = goalAxis === 'z' ? 'x' : 'z';
+    const team0FaceSign = (-arena.getBreachOpenSign(0)) as 1 | -1;
+    const team1FaceSign = (-arena.getBreachOpenSign(1)) as 1 | -1;
+    const portalFacesOpen = {
+      positive: (team0FaceSign === 1 && arena.isGoalDoorOpen(0)) || (team1FaceSign === 1 && arena.isGoalDoorOpen(1)),
+      negative: (team0FaceSign === -1 && arena.isGoalDoorOpen(0)) || (team1FaceSign === -1 && arena.isGoalDoorOpen(1)),
+    };
 
     integrateZeroG(this.phys, dt);
-    bounceArena(this.phys, goalAxis, perpAxis);   // portal opening passthrough only
+    bounceArena(this.phys, goalAxis, perpAxis, portalFacesOpen);
     arena.bounceObstacles(this.phys);
 
     // Return to own breach room
@@ -175,14 +181,14 @@ export class LocalPlayer {
 
     // Enter enemy breach room — gravity + win activate once player is 1 m past the portal face
     const enemyTeam = (1 - this.team) as 0 | 1;
-    if (!this.damage.frozen && arena.isDeepInBreachRoom(this.phys.pos, enemyTeam, 1.0)) {
+    if (!this.damage.frozen
+      && arena.isGoalDoorOpen(enemyTeam)
+      && arena.isDeepInBreachRoom(this.phys.pos, enemyTeam, 1.0)) {
       this.currentBreachTeam = enemyTeam;
       this.phase = 'BREACH';
       this.phys.vel.y = 0;
-      if (arena.isGoalDoorOpen(enemyTeam)) {
-        this.kills++;
-        this.onRoundWin?.(this.team);
-      }
+      this.kills++;
+      this.onRoundWin?.(this.team);
       return;
     }
 

@@ -14,7 +14,7 @@ export class InputManager {
   public constructor() {
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
-      if (e.code === 'KeyE') this.grabPressed = true;
+      if (e.code === 'KeyE' && !e.repeat) this.grabPressed = true;
       // Prevent Tab from switching browser focus
       if (e.code === 'Tab') e.preventDefault();
     });

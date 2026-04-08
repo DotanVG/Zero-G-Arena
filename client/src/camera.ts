@@ -70,7 +70,13 @@ export class CameraController {
       this.transitioning = true;
       this.transitionProgress = 0;
     } else {
-      // Leaving zero-G: snap pitch to horizontal, keep the gravity-mode yaw unchanged.
+      // Leaving zero-G: preserve the current horizontal facing for breach-room controls.
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.zeroGQuat);
+      const flatForward = new THREE.Vector3(forward.x, 0, forward.z);
+      if (flatForward.lengthSq() > 1e-6) {
+        flatForward.normalize();
+        this.yaw = Math.atan2(-flatForward.x, -flatForward.z);
+      }
       this.pitch = 0;
       // No transition needed going back to breach room — physics snaps player to floor anyway
       this.transitioning = false;

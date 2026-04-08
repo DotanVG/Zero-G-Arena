@@ -44,6 +44,7 @@ export function bounceArena(
   state: PhysicsState,
   portalAxis?: 'x' | 'y' | 'z',
   portalPerpAxis?: 'x' | 'z',
+  portalFacesOpen?: { positive: boolean; negative: boolean },
 ): void {
   const limit = ARENA_SIZE / 2 - PLAYER_RADIUS;
   for (const ax of ['x', 'y', 'z'] as const) {
@@ -51,7 +52,12 @@ export function bounceArena(
       // Only allow passthrough when player is within the portal opening
       const inWidth  = Math.abs(state.pos[portalPerpAxis]) < BREACH_ROOM_W / 2;
       const inHeight = Math.abs(state.pos.y)               < BREACH_ROOM_H / 2;
-      if (inWidth && inHeight) continue;   // portal opening — allow passthrough
+      if (inWidth && inHeight) {
+        const withinArena = Math.abs(state.pos[ax]) <= limit;
+        const positiveFaceOpen = state.pos[ax] > limit && portalFacesOpen?.positive;
+        const negativeFaceOpen = state.pos[ax] < -limit && portalFacesOpen?.negative;
+        if (withinArena || positiveFaceOpen || negativeFaceOpen) continue;
+      }
       // Outside the opening → fall through to normal bounce
     }
     if (state.pos[ax] > limit) {
@@ -106,6 +112,7 @@ export function clampBreachRoom(
   center: THREE.Vector3,
   openAxis: 'x' | 'y' | 'z',
   openSign: 1 | -1,
+  portalOpen = true,
 ): void {
   const half = {
     x: BREACH_ROOM_W / 2 - PLAYER_RADIUS,
@@ -118,8 +125,8 @@ export function clampBreachRoom(
     const hi = center[ax] + half[ax];
 
     // Skip the open (portal-facing) side so player can exit into arena
-    if (ax === openAxis && openSign === 1 && state.pos[ax] > hi) continue;
-    if (ax === openAxis && openSign === -1 && state.pos[ax] < lo) continue;
+    if (portalOpen && ax === openAxis && openSign === 1 && state.pos[ax] > hi) continue;
+    if (portalOpen && ax === openAxis && openSign === -1 && state.pos[ax] < lo) continue;
 
     if (state.pos[ax] < lo) {
       state.pos[ax] = lo;

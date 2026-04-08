@@ -3,6 +3,7 @@ import { Arena } from './arena/arena';
 import { CameraController } from './camera';
 import { InputManager } from './input';
 import { LocalPlayer } from './player';
+import { Projectile } from './projectile';
 import { HUD, type GamePhase } from './render/hud';
 import { SceneManager } from './render/scene';
 import { generateArenaLayout } from './arena/states';
@@ -22,6 +23,7 @@ export class App {
   private phase: GamePhase = 'LOBBY';
   private countdownTimer = COUNTDOWN_SECONDS;
   private lastTime = 0;
+  private projectiles: Projectile[] = [];
 
   public constructor() {
     this.sceneMgr = new SceneManager();
@@ -53,11 +55,29 @@ export class App {
 
   private beginNewRound(): void {
     this.hud.hideRoundEnd();
+    this.cam.resetZeroGFlip();   // allow one-time 90° flip on first breach-room exit
+    // Clear projectiles from previous round
+    for (const p of this.projectiles) p.dispose();
+    this.projectiles = [];
     const layout = generateArenaLayout();
     this.arena.loadLayout(layout);
 
     this.player.resetForNewRound(this.arena);
 
+    // Orient camera to face the portal opening
+    // getYawForward() = (-sin(yaw), 0, -cos(yaw)); solve for desired facing direction
+    const openAxis = this.arena.getBreachOpenAxis(this.player.team);
+    const openSign = this.arena.getBreachOpenSign(this.player.team);
+    let targetYaw = 0;
+    if (openAxis === 'z') {
+      targetYaw = openSign === 1 ? Math.PI : 0;
+    } else if (openAxis === 'x') {
+      targetYaw = openSign === 1 ? -Math.PI / 2 : Math.PI / 2;
+    }
+    this.cam.setYaw(targetYaw);
+    this.cam.setPitch(0);
+
+    this.arena.setPortalDoorsOpen(false);  // doors closed during countdown
     this.phase = 'COUNTDOWN';
     this.countdownTimer = COUNTDOWN_SECONDS;
   }
@@ -79,8 +99,13 @@ export class App {
     this.lastTime = timestamp;
 
     if (this.input.isLocked()) {
-      // ── CRITICAL ORDER: setAimingMode BEFORE consumeMouseDelta ──
+      // ── CRITICAL ORDER: mode switches BEFORE consumeMouseDelta ──
       this.input.setAimingMode(this.player.phase === 'AIMING');
+      // Zero-G free-look in arena; gravity mode inside breach rooms
+      this.cam.setZeroGMode(this.player.phase !== 'BREACH');
+
+      // Advance orientation transition (breach→zero-G slerp)
+      this.cam.tickTransition(dt);
 
       const { dx, dy } = this.input.consumeMouseDelta();
       // dy will be 0 when aiming (InputManager routes it to aimDy instead)
@@ -92,6 +117,7 @@ export class App {
         if (this.countdownTimer <= 0) {
           this.countdownTimer = 0;
           this.phase = 'PLAYING';
+          this.arena.setPortalDoorsOpen(true);  // doors open when round starts
         }
       }
 
@@ -99,6 +125,20 @@ export class App {
       this.input.updateFireCooldown(dt);
       this.player.update(this.input, this.cam, this.arena, dt);
       this.arena.update(dt);
+
+      // Weapon: fire projectile on LMB (only while playing and player can fire)
+      if (this.phase === 'PLAYING' && this.player.canFire() && this.input.consumeFire()) {
+        const origin = this.player.getPosition().clone()
+          .addScaledVector(this.cam.getForward(), 1.0);  // spawn ahead of player
+        const color  = this.player.team === 0 ? 0x00ffff : 0xff00ff;
+        this.projectiles.push(
+          new Projectile(this.sceneMgr.getScene(), origin, this.cam.getForward(), color),
+        );
+      }
+
+      // Update and cull dead projectiles
+      for (const p of this.projectiles) p.update(dt);
+      this.projectiles = this.projectiles.filter(p => !p.dead);
 
       // Camera follows player
       this.cam.apply(this.player.getPosition());

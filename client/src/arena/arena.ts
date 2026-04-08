@@ -97,13 +97,16 @@ export class Arena {
       this.scene.add(group);
 
       // Build 5 solid walls (skip the portal-facing side)
-      this.buildBreachWalls(group, team, goalAxis, sign);
+      // openSign = direction FROM back-wall TOWARD arena (opposite of goal sign)
+      const openSign = (-sign) as 1 | -1;
 
-      // Place bars on back wall and side walls (2 bars per breach room)
-      this.placeBreachBars(center, goalAxis, sign, team);
+      this.buildBreachWalls(group, team, goalAxis, openSign);
 
-      this.breachRooms.push({ team, center, openAxis: goalAxis, openSign: sign, group });
+      this.breachRooms.push({ team, center, openAxis: goalAxis, openSign, group });
     }
+
+    // Portal-facing bars on the ARENA SIDE of each goal opening
+    this.placePortalArenaBars(goalAxis, goalSigns);
   }
 
   private buildBreachWalls(
@@ -156,35 +159,58 @@ export class Arena {
     }
   }
 
+  /** One bar on the back wall of the breach room, facing toward the portal. */
   private placeBreachBars(
     center: THREE.Vector3,
     openAxis: 'x' | 'y' | 'z',
     openSign: 1 | -1,
-    team: 0 | 1,
   ): void {
-    // Two bars: one on back wall, one on a side wall
-    const hw = BREACH_ROOM_W / 2 - 0.5;
-    const hh = BREACH_ROOM_H / 2 - 0.5;
     const hd = BREACH_ROOM_D / 2 - 0.5;
-
     if (openAxis === 'z') {
-      // Back wall bar (faces inward = openSign direction)
-      const backZ = center.z + openSign * (-hd);
-      const backN = { x: 0, y: 0, z: openSign as number };
-      this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(0, 0, backZ), backN));
-
-      // Side wall bar
-      const sideX = center.x + hw;
-      const sideN = { x: -1, y: 0, z: 0 };
-      this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(sideX, 0, center.z), sideN));
+      this.barObjects.push(new BarObject(this.scene,
+        new THREE.Vector3(center.x, 0, center.z - openSign * hd),
+        { x: 0, y: 0, z: openSign as number }));
     } else if (openAxis === 'x') {
-      const backX = center.x + openSign * (-hd);
-      this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(backX, 0, 0), { x: openSign as number, y: 0, z: 0 }));
-      this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(center.x, 0, hd), { x: 0, y: 0, z: -1 }));
+      this.barObjects.push(new BarObject(this.scene,
+        new THREE.Vector3(center.x - openSign * hd, 0, center.z),
+        { x: openSign as number, y: 0, z: 0 }));
     } else {
-      const backY = center.y + openSign * (-hd);
-      this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(0, backY, 0), { x: 0, y: openSign as number, z: 0 }));
-      this.barObjects.push(new BarObject(this.scene, new THREE.Vector3(hw, center.y, 0), { x: -1, y: 0, z: 0 }));
+      this.barObjects.push(new BarObject(this.scene,
+        new THREE.Vector3(center.x, center.y - openSign * hd, center.z),
+        { x: 0, y: openSign as number, z: 0 }));
+    }
+  }
+
+  /**
+   * Two grab bars on the ARENA SIDE of each portal opening — left and right rim.
+   * Players can grab these when floating toward a portal to control their approach.
+   */
+  private placePortalArenaBars(
+    goalAxis: 'x' | 'y' | 'z',
+    goalSigns: { team0: 1 | -1; team1: 1 | -1 },
+  ): void {
+    // Player standing: floor at -3 (center.y=0), grab height ~1.6u above floor = -1.4
+    const barY = -BREACH_ROOM_H / 2 + 1.6;
+
+    for (const team of [0, 1] as const) {
+      const sign    = team === 0 ? goalSigns.team0 : goalSigns.team1;
+      const wallPos = sign * (ARENA_SIZE / 2 - 0.5);  // just inside arena wall
+
+      if (goalAxis === 'z') {
+        this.barObjects.push(new BarObject(this.scene,
+          new THREE.Vector3(-BREACH_ROOM_W / 2, barY, wallPos),
+          { x: 1, y: 0, z: 0 }));
+        this.barObjects.push(new BarObject(this.scene,
+          new THREE.Vector3(BREACH_ROOM_W / 2, barY, wallPos),
+          { x: -1, y: 0, z: 0 }));
+      } else if (goalAxis === 'x') {
+        this.barObjects.push(new BarObject(this.scene,
+          new THREE.Vector3(wallPos, barY, -BREACH_ROOM_W / 2),
+          { x: 0, y: 0, z: 1 }));
+        this.barObjects.push(new BarObject(this.scene,
+          new THREE.Vector3(wallPos, barY, BREACH_ROOM_W / 2),
+          { x: 0, y: 0, z: -1 }));
+      }
     }
   }
 
@@ -201,6 +227,28 @@ export class Arena {
     );
   }
 
+  /**
+   * Returns true when `pos` is at least `minDepth` units past the open (portal) face
+   * of the given team's breach room — used for win detection and gravity activation.
+   */
+  public isDeepInBreachRoom(pos: THREE.Vector3, team: 0 | 1, minDepth: number): boolean {
+    const room = this.breachRooms[team];
+    if (!room) return false;
+    const c   = room.center;
+    const ax  = room.openAxis;
+
+    // Depth along goal axis: must be minDepth units inside the open face
+    if (Math.abs(pos[ax] - c[ax]) >= BREACH_ROOM_D / 2 - minDepth) return false;
+
+    // Lateral bounds (correct per axis)
+    for (const a of (['x', 'y', 'z'] as const)) {
+      if (a === ax) continue;
+      const half = a === 'y' ? BREACH_ROOM_H / 2 : BREACH_ROOM_W / 2;
+      if (Math.abs(pos[a] - c[a]) >= half) return false;
+    }
+    return true;
+  }
+
   public getBreachRoomCenter(team: 0 | 1): THREE.Vector3 {
     return this.breachRooms[team]?.center.clone() ?? new THREE.Vector3(0, 0, team === 0 ? -23 : 23);
   }
@@ -210,7 +258,7 @@ export class Arena {
   }
 
   public getBreachOpenSign(team: 0 | 1): 1 | -1 {
-    return this.breachRooms[team]?.openSign ?? (team === 0 ? -1 : 1);
+    return this.breachRooms[team]?.openSign ?? (team === 0 ? 1 : -1);
   }
 
   public getNearestBar(pos: THREE.Vector3, radius: number): THREE.Vector3 | null {
@@ -272,9 +320,23 @@ export class Arena {
     return this.goalPlanes;
   }
 
-  /** Per-frame update: pulse bars. */
+  /** Open or close the portal doors on all goal planes. */
+  public setPortalDoorsOpen(open: boolean): void {
+    for (const goal of this.goalPlanes) goal.setDoorOpen(open);
+  }
+
+  /** Returns true once the door for the given team's goal is at least half open. */
+  public isGoalDoorOpen(team: 0 | 1): boolean {
+    for (const goal of this.goalPlanes) {
+      if (goal.getTeam() === team) return goal.isDoorOpen();
+    }
+    return false;
+  }
+
+  /** Per-frame update: pulse bars + animate portal doors. */
   public update(dt: number): void {
     for (const bar of this.barObjects) bar.update(dt);
+    for (const goal of this.goalPlanes) goal.update(dt);
   }
 
   // -- Cleanup helpers ---------------------------------------------

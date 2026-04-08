@@ -6,6 +6,8 @@ import {
   GRAB_RADIUS,
   PLAYER_RADIUS,
   RESPAWN_TIME,
+  BREACH_ROOM_D,
+  BREACH_ROOM_H,
 } from '../../shared/constants';
 import { clamp } from './util/math';
 import { type DamageState, type PlayerPhase } from '../../shared/schema';
@@ -43,6 +45,7 @@ export class LocalPlayer {
 
   public launchPower = 0;
   public grabbedBarPos: THREE.Vector3 | null = null;
+  public currentBreachTeam: 0 | 1 = 0;   // which breach room provides gravity (changes on score)
 
   private respawnTimer = 0;
   private onGround = false;
@@ -118,11 +121,12 @@ export class LocalPlayer {
     arena: Arena,
     dt: number,
   ): void {
-    const center = arena.getBreachRoomCenter(this.team);
-    const openAxis = arena.getBreachOpenAxis(this.team);
-    const openSign = arena.getBreachOpenSign(this.team);
+    const center = arena.getBreachRoomCenter(this.currentBreachTeam);
+    const openAxis = arena.getBreachOpenAxis(this.currentBreachTeam);
+    const openSign = arena.getBreachOpenSign(this.currentBreachTeam);
 
-    const floorY = center.y - BREACH_ROOM_H_HALF();
+    // Floor matches clampBreachRoom: center.y - (BREACH_ROOM_H/2 - PLAYER_RADIUS)
+    const floorY = center.y - BREACH_ROOM_H / 2 + PLAYER_RADIUS;
     this.onGround = this.phys.pos.y <= floorY + 0.08;
 
     integrateBreachRoom(
@@ -138,12 +142,12 @@ export class LocalPlayer {
     clampBreachRoom(this.phys, center, openAxis, openSign);
 
     const nearBar = arena.getNearestBar(this.phys.pos, GRAB_RADIUS);
-    if (nearBar && input.isGrab() && this.canGrabBar()) {
+    if (nearBar && input.consumeGrab() && this.canGrabBar()) {
       this.grabBar(nearBar);
       return;
     }
 
-    if (!arena.isInBreachRoom(this.phys.pos, this.team)) {
+    if (!arena.isInBreachRoom(this.phys.pos, this.currentBreachTeam)) {
       this.phase = 'FLOATING';
     }
   }
@@ -154,28 +158,36 @@ export class LocalPlayer {
     arena: Arena,
     dt: number,
   ): void {
+    const goalAxis = arena.getBreachOpenAxis(this.team);
+    const perpAxis: 'x' | 'z' = goalAxis === 'z' ? 'x' : 'z';
+
     integrateZeroG(this.phys, dt);
-    bounceArena(this.phys);
+    bounceArena(this.phys, goalAxis, perpAxis);   // portal opening passthrough only
     arena.bounceObstacles(this.phys);
 
+    // Return to own breach room
     if (arena.isInBreachRoom(this.phys.pos, this.team)) {
+      this.currentBreachTeam = this.team;
       this.phase = 'BREACH';
       this.phys.vel.y = 0;
       return;
     }
 
-    if (!this.damage.frozen) {
-      for (const goal of arena.getGoalPlanes()) {
-        if (goal.checkEntry(this.phys.pos, this.team)) {
-          this.kills++;
-          this.onRoundWin?.(this.team);
-          return;
-        }
+    // Enter enemy breach room — gravity + win activate once player is 1 m past the portal face
+    const enemyTeam = (1 - this.team) as 0 | 1;
+    if (!this.damage.frozen && arena.isDeepInBreachRoom(this.phys.pos, enemyTeam, 1.0)) {
+      this.currentBreachTeam = enemyTeam;
+      this.phase = 'BREACH';
+      this.phys.vel.y = 0;
+      if (arena.isGoalDoorOpen(enemyTeam)) {
+        this.kills++;
+        this.onRoundWin?.(this.team);
       }
+      return;
     }
 
     const nearBar = arena.getNearestBar(this.phys.pos, GRAB_RADIUS);
-    if (nearBar && input.isGrab() && this.canGrabBar()) {
+    if (nearBar && input.consumeGrab() && this.canGrabBar()) {
       this.grabBar(nearBar);
     }
   }
@@ -192,6 +204,13 @@ export class LocalPlayer {
 
     this.phys.pos.lerp(this.grabbedBarPos, 1 - Math.pow(0.002, dt));
     this.phys.vel.set(0, 0, 0);
+
+    // E releases the bar — stay at current bar position with zero velocity
+    if (input.consumeGrab()) {
+      this.phase = 'FLOATING';
+      this.grabbedBarPos = null;
+      return;
+    }
 
     if (input.isAiming()) {
       this.phase = 'AIMING';
@@ -228,11 +247,16 @@ export class LocalPlayer {
     this.respawnTimer -= dt;
     if (this.respawnTimer <= 0) {
       this.respawnTimer = 0;
-      const center = arena.getBreachRoomCenter(this.team);
-      const floorY = center.y - BREACH_ROOM_H_HALF() + PLAYER_RADIUS + 0.1;
-      this.phys.pos.set(center.x, floorY, center.z);
+      this.currentBreachTeam = this.team;
+      const center   = arena.getBreachRoomCenter(this.team);
+      const openAxis = arena.getBreachOpenAxis(this.team);
+      const openSign = arena.getBreachOpenSign(this.team);
+      const floorY   = center.y - BREACH_ROOM_H_HALF() + PLAYER_RADIUS + 0.1;
+      const spawnPos = center.clone();
+      spawnPos[openAxis] -= openSign * (BREACH_ROOM_D / 2 - PLAYER_RADIUS - 0.5);
+      this.phys.pos.set(spawnPos.x, floorY, spawnPos.z);
       this.phys.vel.set(0, 0, 0);
-      this.phase = 'BREACH';
+      this.phase     = 'BREACH';
     }
   }
 
@@ -245,6 +269,8 @@ export class LocalPlayer {
 
   private launch(cam: CameraController): void {
     const fwd = cam.getForward();
+    // Offset player away from bar/obstacle surface before applying velocity
+    this.phys.pos.addScaledVector(fwd, PLAYER_RADIUS + 0.8);
     this.phys.vel.copy(fwd).multiplyScalar(this.launchPower);
     this.launchPower = 0;
     this.grabbedBarPos = null;
@@ -387,13 +413,19 @@ export class LocalPlayer {
     };
     this.launchPower = 0;
     this.grabbedBarPos = null;
+    this.currentBreachTeam = this.team;
     this.hideArrow();
     this.phys.vel.set(0, 0, 0);
 
-    const center = arena.getBreachRoomCenter(this.team);
-    const floorY = center.y - BREACH_ROOM_H_HALF() + PLAYER_RADIUS + 0.1;
-    this.phys.pos.set(center.x, floorY, center.z);
-    this.phase = 'BREACH';
+    const center   = arena.getBreachRoomCenter(this.team);
+    const openAxis = arena.getBreachOpenAxis(this.team);
+    const openSign = arena.getBreachOpenSign(this.team);
+    const floorY   = center.y - BREACH_ROOM_H_HALF() + PLAYER_RADIUS + 0.1;
+    // Spawn at back of breach room, facing portal
+    const spawnPos = center.clone();
+    spawnPos[openAxis] -= openSign * (BREACH_ROOM_D / 2 - PLAYER_RADIUS - 0.5);
+    this.phys.pos.set(spawnPos.x, floorY, spawnPos.z);
+    this.phase   = 'BREACH';
   }
 
   public getPosition(): THREE.Vector3 {

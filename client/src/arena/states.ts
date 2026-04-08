@@ -116,9 +116,9 @@ const ARCHETYPES: Record<string, [number, number, number][]> = {
   ],
 };
 
-/** Generate bar attachment points on obstacle surfaces. */
+/** Generate bar attachment points spread across all 6 obstacle faces with random surface offsets. */
 function generateBars(rng: () => number, size: [number, number, number], count: number): BarDef[] {
-  const faces: { axis: 'x' | 'y' | 'z'; sign: 1 | -1 }[] = [
+  const allFaces: { axis: 'x' | 'y' | 'z'; sign: 1 | -1 }[] = [
     { axis: 'x', sign: 1 },
     { axis: 'x', sign: -1 },
     { axis: 'y', sign: 1 },
@@ -127,20 +127,37 @@ function generateBars(rng: () => number, size: [number, number, number], count: 
     { axis: 'z', sign: -1 },
   ];
 
-  // Shuffle and pick `count` faces
-  const shuffled = faces.sort(() => rng() - 0.5).slice(0, count);
   const half = { x: size[0] / 2, y: size[1] / 2, z: size[2] / 2 } as Record<string, number>;
+  const bars: BarDef[] = [];
 
-  return shuffled.map(({ axis, sign }): BarDef => {
-    const lp = { x: 0, y: 0, z: 0 } as Record<string, number>;
-    lp[axis] = sign * (half[axis] + 0.15); // just outside the surface
-    const norm = { x: 0, y: 0, z: 0 } as Record<string, number>;
+  // Distribute bars evenly across all faces, cycling round-robin then randomising offsets
+  for (let i = 0; i < count; i++) {
+    const face = allFaces[i % allFaces.length];
+    const { axis, sign } = face;
+
+    // The two tangent axes on this face
+    const tangents = (['x', 'y', 'z'] as const).filter(a => a !== axis);
+    const [ta, tb] = tangents;
+
+    // Random position within 60 % of the face extent so bars aren't on the edge
+    const offA = (rng() * 2 - 1) * half[ta] * 0.6;
+    const offB = (rng() * 2 - 1) * half[tb] * 0.6;
+
+    const lp: Record<string, number> = { x: 0, y: 0, z: 0 };
+    lp[axis] = sign * (half[axis] + 0.15);  // just outside the surface
+    lp[ta]   = offA;
+    lp[tb]   = offB;
+
+    const norm: Record<string, number> = { x: 0, y: 0, z: 0 };
     norm[axis] = sign;
-    return {
+
+    bars.push({
       localPos: { x: lp.x, y: lp.y, z: lp.z },
-      normal: { x: norm.x, y: norm.y, z: norm.z },
-    };
-  });
+      normal:   { x: norm.x, y: norm.y, z: norm.z },
+    });
+  }
+
+  return bars;
 }
 
 /**
@@ -150,7 +167,7 @@ function generateBars(rng: () => number, size: [number, number, number], count: 
  */
 export function generateArenaLayout(seed = Date.now()): GeneratedLayout {
   const rng = mulberry32(seed);
-  const goalAxis = pick(rng, ['x', 'y', 'z'] as const);
+  const goalAxis = pick(rng, ['x', 'z'] as const);  // Y-axis excluded (portals must be vertical)
   const count = OBSTACLE_MIN + Math.floor(rng() * (OBSTACLE_MAX - OBSTACLE_MIN + 1));
   const half = Math.floor(count / 2);
 

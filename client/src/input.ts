@@ -7,12 +7,14 @@ export class InputManager {
   private aimDy         = 0;         // separate accumulator for aim power (during AIMING phase)
   private aimingActive  = false;
   private fireCooldown  = 0;
+  private grabPressed   = false;     // one-shot: true only on the frame E is first pressed
 
   public mouseSensitivity = 0.002;
 
   public constructor() {
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
+      if (e.code === 'KeyE') this.grabPressed = true;
       // Prevent Tab from switching browser focus
       if (e.code === 'Tab') e.preventDefault();
     });
@@ -85,7 +87,14 @@ export class InputManager {
   /** Jump — only active in breach room. Space key. */
   public isJumping(): boolean { return this.keys.has('Space'); }
 
-  /** Grab bar — KeyE. Distinct from jump. */
+  /** Grab bar — KeyE. Distinct from jump. Returns true only on the first frame E is pressed. */
+  public consumeGrab(): boolean {
+    const v = this.grabPressed;
+    this.grabPressed = false;
+    return v;
+  }
+
+  /** @deprecated use consumeGrab() */
   public isGrab(): boolean { return this.keys.has('KeyE'); }
 
   /**
@@ -94,12 +103,17 @@ export class InputManager {
    */
   public isAiming(): boolean { return this.keys.has('Space'); }
 
-  /** Fire (LMB). Respects fire rate cooldown. */
+  /** Fire (LMB). Respects fire rate cooldown. Returns true once per allowed shot. */
   public updateFireCooldown(dt: number): void { this.fireCooldown -= dt; }
   public canFire(): boolean {
     if (this.fireCooldown > 0) return false;
     this.fireCooldown = 1 / FIRE_RATE;
     return true;
+  }
+  /** True if LMB is held AND fire rate allows a shot this frame. */
+  public consumeFire(): boolean {
+    if (!this.keys.has('MouseLeft')) return false;
+    return this.canFire();
   }
 
   /** Tab key — show scoreboard overlay */

@@ -9,15 +9,15 @@ export const FIRE_RATE              = 6;
 // Zero-G / Launch
 export const MAX_LAUNCH_SPEED       = 20;
 export const LEGS_HIT_LAUNCH_FACTOR = 2 / 3;
-export const ZERO_G_DAMPING         = 0.9995;
-export const GRAB_RADIUS            = 2.0;
+export const ZERO_G_DAMPING         = 1.0;    // true zero-G — no velocity bleed
+export const GRAB_RADIUS            = 3.0;
 export const LAUNCH_AIM_SENSITIVITY = 0.05;
 
 // Bars
 export const BAR_RADIUS             = 0.1;
 export const BAR_LENGTH             = 1.5;
-export const BARS_PER_OBS_MIN       = 1;
-export const BARS_PER_OBS_MAX       = 3;
+export const BARS_PER_OBS_MIN       = 3;
+export const BARS_PER_OBS_MAX       = 8;
 
 // Breach room
 export const BREACH_ROOM_W          = 8;
@@ -27,13 +27,16 @@ export const BREACH_GRAVITY         = -12;
 export const BREACH_JUMP_SPEED      = 7;
 export const BREACH_WALK_SPEED      = 6;
 
+// Zero-G portal gravity — subtle pull toward enemy portal in FLOATING state
+export const ZERO_G_PORTAL_GRAVITY  = 1.5;
+
 // Game flow
-export const COUNTDOWN_SECONDS      = 10;
+export const COUNTDOWN_SECONDS      = 5;
 export const ROUND_END_DELAY        = 5;     // seconds before new round starts
 
 // Obstacles
-export const OBSTACLE_MIN           = 8;
-export const OBSTACLE_MAX           = 14;
+export const OBSTACLE_MIN           = 14;
+export const OBSTACLE_MAX           = 22;
 
 // Legacy (kept for server sim — no longer used by client physics)
 export const ACCEL                  = 18;

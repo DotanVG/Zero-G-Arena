@@ -32,16 +32,35 @@ export function integrateZeroG(state: PhysicsState, dt: number): void {
  * Bounce off arena cube walls (±ARENA_SIZE/2 on each axis).
  * Used for all players inside the arena.
  */
-export function bounceArena(state: PhysicsState): void {
+/**
+ * Bounce off arena cube walls (±ARENA_SIZE/2 on each axis).
+ * On the portal axis the wall is solid EXCEPT within the portal opening
+ * (BREACH_ROOM_W wide × BREACH_ROOM_H tall, centred at origin on that face).
+ *
+ * @param portalAxis     - goal axis ('x' or 'z'); both ± faces have portal openings
+ * @param portalPerpAxis - horizontal axis perpendicular to portalAxis
+ */
+export function bounceArena(
+  state: PhysicsState,
+  portalAxis?: 'x' | 'y' | 'z',
+  portalPerpAxis?: 'x' | 'z',
+): void {
   const limit = ARENA_SIZE / 2 - PLAYER_RADIUS;
   for (const ax of ['x', 'y', 'z'] as const) {
+    if (ax === portalAxis && portalPerpAxis !== undefined) {
+      // Only allow passthrough when player is within the portal opening
+      const inWidth  = Math.abs(state.pos[portalPerpAxis]) < BREACH_ROOM_W / 2;
+      const inHeight = Math.abs(state.pos.y)               < BREACH_ROOM_H / 2;
+      if (inWidth && inHeight) continue;   // portal opening — allow passthrough
+      // Outside the opening → fall through to normal bounce
+    }
     if (state.pos[ax] > limit) {
       state.pos[ax] = limit;
-      if (state.vel[ax] > 0) state.vel[ax] *= -0.6;
+      if (state.vel[ax] > 0) state.vel[ax] *= -1;
     }
     if (state.pos[ax] < -limit) {
       state.pos[ax] = -limit;
-      if (state.vel[ax] < 0) state.vel[ax] *= -0.6;
+      if (state.vel[ax] < 0) state.vel[ax] *= -1;
     }
   }
 }
@@ -59,7 +78,7 @@ export function integrateBreachRoom(
   onGround: boolean,
   dt: number,
 ): void {
-  // Horizontal: direct velocity set for responsive feel
+  // Horizontal: WASD always responsive
   const h = yawRight
     .clone()
     .multiplyScalar(walkAxes.x)
@@ -68,12 +87,11 @@ export function integrateBreachRoom(
   state.vel.x = h.x * BREACH_WALK_SPEED;
   state.vel.z = h.z * BREACH_WALK_SPEED;
 
-  // Vertical: gravity + jump impulse
+  // Vertical: pure upward jump — no forward force
   if (jumping && onGround) {
     state.vel.y = BREACH_JUMP_SPEED;
   }
   state.vel.y += BREACH_GRAVITY * dt;
-
   state.pos.addScaledVector(state.vel, dt);
 }
 

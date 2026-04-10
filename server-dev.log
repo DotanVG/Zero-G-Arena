@@ -1,0 +1,102 @@
+
+> orbital-breach-server@0.1.0 dev
+> ts-node-dev --respawn --transpile-only src/index.ts
+
+[INFO] 11:08:58 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+Orbital Breach server running on port 3001
+[INFO] 11:27:34 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 11:28:18 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\index.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:00:52 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\constants.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:01:08 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\player.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:01:22 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\arena-query.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:01:31 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:02:24 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:02:40 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:02:53 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:03:06 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:03:20 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:03:37 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:03:58 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\index.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 12:19:52 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\index.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:03:42 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\arena-query.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:04:02 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:04:08 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\player.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:05:07 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:05:50 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\physics.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:51:37 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\player-logic.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:52:23 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\arena-query.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:52:50 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\player.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:53:07 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:53:14 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\bot\brain.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:54:17 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\bot\brain.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:55:03 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:58:03 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\constants.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:58:19 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\physics.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:59:25 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\player.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 00:59:38 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 01:01:50 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\constants.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:43:11 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\constants.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:46:44 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\physics.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:47:03 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\player-logic.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:47:09 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\player-logic.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:47:14 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\player-logic.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:48:07 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\shared\arena-gen.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:48:14 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\player.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:48:21 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:48:27 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:48:31 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:48:39 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:48:47 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:48:57 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:49:04 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:49:08 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\sim.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:49:22 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\room.ts has been modified
+Orbital Breach server running on port 3001
+[INFO] 15:49:32 Restarting: B:\Code\Github Clones\DotanVG\Zero-G-Arena\server\src\index.ts has been modified
+Orbital Breach server running on port 3001

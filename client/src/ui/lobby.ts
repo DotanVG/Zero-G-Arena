@@ -31,10 +31,15 @@ export class LobbyScreen {
 
     this.el.innerHTML = `
       <style>
+        @keyframes lobbyFadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
         .lobby-root {
           position: fixed; inset: 0; background: rgba(8,12,20,0.92);
           display: flex; flex-direction: column; align-items: center; justify-content: center;
           font-family: monospace; color: #ccc; z-index: 200;
+          animation: lobbyFadeIn 0.3s ease-out both;
         }
         .lobby-back {
           position: absolute; top: 20px; left: 20px;

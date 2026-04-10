@@ -8,6 +8,9 @@ export class HUD {
   private objTypewriterIdx = 0;
   private objTypewriterTimer = 0;
   private prevPhase: GamePhase = 'LOBBY';
+  private displayedPower = 0;
+  private prevScoreStr = '';
+  private prevDamageKey = '';
   private static readonly OBJECTIVE_TEXT = 'Objective — Breach Enemy Portal or Freeze them ALL';
 
   public constructor() {
@@ -23,6 +26,32 @@ export class HUD {
       color: 'white',
       userSelect: 'none',
     });
+
+    // Inject animation keyframes for HUD polish
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes scorePulse {
+        0%   { filter: brightness(3) drop-shadow(0 0 10px #fff); }
+        100% { filter: brightness(1) drop-shadow(0 0 0px transparent); }
+      }
+      @keyframes dmgFadeIn {
+        from { opacity: 0; transform: translateX(-6px); }
+        to   { opacity: 1; transform: translateX(0); }
+      }
+      @keyframes crosshairNear {
+        0%,100% { box-shadow: 0 0 0px transparent; }
+        50%     { box-shadow: 0 0 7px 2px #00ffff88; }
+      }
+      @keyframes roundEndIn {
+        from { opacity: 0; transform: scale(1.18); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+      .score-pulse   { animation: scorePulse 0.4s ease-out; }
+      .dmg-item      { display: inline-block; animation: dmgFadeIn 0.2s ease-out; }
+      .crosshair-near { background: #00ffff !important; animation: crosshairNear 1s ease-in-out infinite; }
+      .round-end-in  { animation: roundEndIn 0.45s cubic-bezier(0.22,1,0.36,1) both; }
+    `;
+    document.head.appendChild(style);
 
     this.el.innerHTML = `
       <!-- Countdown (big centre) -->
@@ -99,7 +128,7 @@ export class HUD {
       <!-- Round end overlay -->
       <div id="hud-round-end" style="
         display:none;position:absolute;inset:0;
-        display:none;align-items:center;justify-content:center;
+        align-items:center;justify-content:center;
         background:rgba(0,0,0,0.6);font-size:52px;
         letter-spacing:0.08em;text-shadow:0 0 30px #fff;
       "></div>
@@ -132,6 +161,9 @@ export class HUD {
     if (el) {
       el.textContent = message;
       el.style.display = 'flex';
+      el.classList.remove('round-end-in');
+      void el.offsetWidth; // force reflow to restart animation
+      el.classList.add('round-end-in');
     }
   }
 
@@ -164,10 +196,17 @@ export class HUD {
       dt, allFrozenTeam, allFrozenTimer,
     } = opts;
 
-    // Score
+    // Score — pulse on change
     const scoreEl = this.q<HTMLDivElement>('hud-score');
     if (scoreEl) {
-      scoreEl.textContent = `${score.team0}  —  ${score.team1}`;
+      const newStr = `${score.team0}  —  ${score.team1}`;
+      if (newStr !== this.prevScoreStr) {
+        this.prevScoreStr = newStr;
+        scoreEl.textContent = newStr;
+        scoreEl.classList.remove('score-pulse');
+        void scoreEl.offsetWidth;
+        scoreEl.classList.add('score-pulse');
+      }
     }
 
     // Phase transition tracking
@@ -235,6 +274,14 @@ export class HUD {
       }
     }
 
+    // Crosshair — pulse when near a grabbable bar
+    const crosshairEl = this.q<HTMLDivElement>('hud-crosshair');
+    if (crosshairEl) {
+      const nearActive = nearBar && !damage.leftArm && !damage.frozen
+        && (playerPhase === 'FLOATING' || playerPhase === 'BREACH');
+      crosshairEl.classList.toggle('crosshair-near', nearActive);
+    }
+
     // Breach room label
     const breachEl = this.q<HTMLDivElement>('hud-breach');
     if (breachEl) {
@@ -273,14 +320,16 @@ export class HUD {
       if (showPrompt) grabEl.textContent = promptText;
     }
 
-    // Power bar
+    // Power bar — lerped for smooth animation
     const wrapEl = this.q<HTMLDivElement>('hud-power-wrap');
     const barEl = this.q<HTMLDivElement>('hud-power-bar');
     const lblEl = this.q<HTMLDivElement>('hud-power-label');
     if (wrapEl && barEl && lblEl) {
       const showBar = playerPhase === 'GRABBING' || playerPhase === 'AIMING';
       wrapEl.style.display = showBar ? 'block' : 'none';
-      const pct = maxLaunchPower > 0 ? (launchPower / maxLaunchPower) * 100 : 0;
+      const targetPct = maxLaunchPower > 0 ? (launchPower / maxLaunchPower) * 100 : 0;
+      this.displayedPower += (targetPct - this.displayedPower) * Math.min(1, dt * 18);
+      const pct = this.displayedPower;
       barEl.style.width = `${pct.toFixed(1)}%`;
       lblEl.textContent = `POWER  ${Math.round(pct)}%`;
       // Colour shift: green→yellow→red as power grows
@@ -288,25 +337,22 @@ export class HUD {
       barEl.style.background = `hsl(${hue},90%,55%)`;
     }
 
-    // Damage indicators
+    // Damage indicators — only rebuild DOM when state changes (fade-in on new items)
     const dmgEl = this.q<HTMLDivElement>('hud-damage');
     if (dmgEl) {
       const parts: string[] = [];
-      if (damage.frozen) {
-        parts.push('⬛ FROZEN');
+      if (damage.frozen)          parts.push('⬛ FROZEN');
+      if (damage.leftArm)         parts.push('🦾 LEFT ARM — NO GRAB');
+      if (damage.rightArm)        parts.push('🦾 RIGHT ARM — NO FIRE');
+      if (damage.legs === 1)      parts.push('🦵 LEG HIT — −25% LAUNCH');
+      else if (damage.legs >= 2)  parts.push('🦵 BOTH LEGS — −50% LAUNCH');
+      const key = parts.join('|');
+      if (key !== this.prevDamageKey) {
+        this.prevDamageKey = key;
+        dmgEl.innerHTML = parts
+          .map(p => `<span class="dmg-item">${p}</span>`)
+          .join('<br>');
       }
-      if (damage.leftArm) {
-        parts.push('🦾 LEFT ARM — NO GRAB');
-      }
-      if (damage.rightArm) {
-        parts.push('🦾 RIGHT ARM — NO FIRE');
-      }
-      if (damage.legs === 1) {
-        parts.push('🦵 LEG HIT — −25% LAUNCH');
-      } else if (damage.legs >= 2) {
-        parts.push('🦵 BOTH LEGS — −50% LAUNCH');
-      }
-      dmgEl.innerHTML = parts.join('<br>');
     }
 
     // Tab scoreboard

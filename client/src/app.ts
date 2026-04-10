@@ -14,6 +14,7 @@ import { MainMenu, type MatchSize } from './ui/menu';
 import { LobbyScreen } from './ui/lobby';
 import { KillFeed } from './ui/kill-feed';
 import { PauseMenu } from './ui/pause-menu';
+import { SoundEngine } from './audio/sound-engine';
 import {
   COUNTDOWN_SECONDS,
   ROUND_END_DELAY,
@@ -54,6 +55,7 @@ export class App {
   private lobby:     LobbyScreen;
   private killFeed:  KillFeed;
   private pauseMenu: PauseMenu;
+  private sound:     SoundEngine;
 
   // Server-side all-frozen info
   private allFrozenTeam:  0 | 1 | undefined = undefined;
@@ -83,6 +85,7 @@ export class App {
     this.lobby     = new LobbyScreen();
     this.killFeed  = new KillFeed();
     this.pauseMenu = new PauseMenu();
+    this.sound     = new SoundEngine();
 
     this.player.onRoundWin = (team) => this.onRoundWin(team);
     this._wireNetwork();
@@ -133,6 +136,10 @@ export class App {
       }
     });
 
+    // Unlock AudioContext on first interaction (browser requirement)
+    const unlockAudio = () => { this.sound.resume(); document.removeEventListener('click', unlockAudio); };
+    document.addEventListener('click', unlockAudio);
+
     this.menu.show();
 
     requestAnimationFrame((t) => this.loop(t));
@@ -141,7 +148,7 @@ export class App {
   // ── Menu flow ──────────────────────────────────────────────────────────────
 
   private _onQuickPlay(size: MatchSize): void {
-    this.menu.hide();
+    this.menu.fadeOut();
     this.manualReturnToMenu = false;
     this.player.setServerAuthoritative(true);
 
@@ -160,7 +167,7 @@ export class App {
   }
 
   private _onJoinRoom(roomId: string, size: MatchSize): void {
-    this.menu.hide();
+    this.menu.fadeOut();
     this.manualReturnToMenu = false;
     this.player.setServerAuthoritative(true);
 
@@ -274,7 +281,10 @@ export class App {
     // Update game phase from server
     if (msg.phase !== this.phase) {
       this.phase = msg.phase as GamePhase;
-      if (msg.phase === 'PLAYING') this.arena.setPortalDoorsOpen(true);
+      if (msg.phase === 'PLAYING') {
+        this.arena.setPortalDoorsOpen(true);
+        this.sound.playRoundStart();
+      }
       if (msg.phase === 'COUNTDOWN') this.arena.setPortalDoorsOpen(false);
     }
 
@@ -317,6 +327,7 @@ export class App {
         const dir    = new THREE.Vector3(data.vel.x, data.vel.y, data.vel.z).normalize();
         const color  = data.team === 0 ? 0x00ffff : 0xff00ff;
         this.projectiles.push(new Projectile(this.sceneMgr.getScene(), origin, dir, color));
+        this.sound.playShoot(data.team as 0 | 1);
         break;
       }
       case 'hit': {
@@ -328,17 +339,20 @@ export class App {
         // Killer team is the opposite of victim team
         const killerTeam = (1 - victimTeam) as 0 | 1;
         this.killFeed.addKill(data.killerName, killerTeam, data.victimName, victimTeam);
+        this.sound.playFreeze();
         break;
       }
       case 'score': {
         const data = msg.data as ScoreEventData;
         this.killFeed.addScore(data.scorerName, data.scorerTeam as 0 | 1);
+        this.sound.playBreach();
         break;
       }
       case 'roundEnd': {
         this.phase = 'ROUND_END';
         const data = msg.data as { scorerTeam: 0|1; scorerName: string };
         this.hud.showRoundEnd(data.scorerTeam === 0 ? 'CYAN WINS' : 'MAGENTA WINS');
+        this.sound.playRoundEnd(data.scorerTeam === this.player.team);
         break;
       }
     }
@@ -365,6 +379,7 @@ export class App {
     this.phase = 'ROUND_END';
     const label = team === 0 ? 'CYAN WINS' : 'MAGENTA WINS';
     this.hud.showRoundEnd(label);
+    this.sound.playRoundEnd(team === this.player.team);
     if (!this.isMultiplayer) {
       setTimeout(() => this.beginNewRound(), ROUND_END_DELAY * 1000);
     }
@@ -393,6 +408,7 @@ export class App {
           this.countdownTimer = 0;
           this.phase = 'PLAYING';
           this.arena.setPortalDoorsOpen(true);
+          this.sound.playRoundStart();
         }
       }
 
@@ -432,6 +448,7 @@ export class App {
             .addScaledVector(shotDir, 1.0);
           const color = this.player.team === 0 ? 0x00ffff : 0xff00ff;
           this.projectiles.push(new Projectile(this.sceneMgr.getScene(), origin, shotDir, color));
+          this.sound.playShoot(this.player.team);
         }
         // Multiplayer: fire is sent in the input message; server broadcasts shoot event
       }

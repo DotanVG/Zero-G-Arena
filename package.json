@@ -1,0 +1,11 @@
+{
+  "name": "orbital-breach",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --names \"server,client\" --prefix-colors \"cyan,magenta\" \"npm run dev --prefix server\" \"npm run dev --prefix client\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

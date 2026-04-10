@@ -19,6 +19,10 @@ const CSS = `
     0%   { background-position: 0 0; }
     100% { background-position: 0 4px; }
   }
+  @keyframes menuFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
   .menu-root {
     position: fixed; inset: 0;
     background: rgba(8,12,20,0.88);
@@ -27,7 +31,8 @@ const CSS = `
     );
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     font-family: monospace; color: #aaa; z-index: 300;
-    animation: scanline 0.1s linear infinite;
+    animation: scanline 0.1s linear infinite, menuFadeIn 0.35s ease-out both;
+    transition: opacity 0.22s ease-out, transform 0.22s ease-out;
   }
   .menu-title {
     font-size: 52px; letter-spacing: 12px; font-weight: bold;
@@ -35,7 +40,7 @@ const CSS = `
     margin-bottom: 6px;
   }
   .menu-subtitle {
-    font-size: 13px; letter-spacing: 6px; color: #336; margin-bottom: 48px;
+    font-size: 13px; letter-spacing: 6px; color: #4477bb; margin-bottom: 48px;
     text-transform: uppercase;
   }
   .menu-section { margin-bottom: 28px; text-align: center; }
@@ -195,6 +200,16 @@ export class MainMenu {
   public hide(): void {
     this.el?.remove();
     this.el = null;
+  }
+
+  /** Fade the menu out, then call cb (or just call cb immediately if nothing to fade). */
+  public fadeOut(cb?: () => void): void {
+    const root = this.el?.querySelector<HTMLElement>('#menu-root');
+    if (!root) { cb?.(); return; }
+    root.style.opacity = '0';
+    root.style.transform = 'scale(1.04)';
+    root.style.pointerEvents = 'none';
+    setTimeout(() => { this.hide(); cb?.(); }, 230);
   }
 
   public isVisible(): boolean { return this.el !== null; }

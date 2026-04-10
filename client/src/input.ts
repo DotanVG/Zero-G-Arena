@@ -1,4 +1,4 @@
-import { FIRE_RATE } from '../../shared/constants';
+import { FIRE_RATE, REVOLVER_FOCUS_TIME, REVOLVER_MIN_FIRE_TIME } from '../../shared/constants';
 
 export class InputManager {
   private keys          = new Set<string>();
@@ -7,6 +7,10 @@ export class InputManager {
   private aimDy         = 0;         // separate accumulator for aim power (during AIMING phase)
   private aimingActive  = false;
   private fireCooldown  = 0;
+  private fireHoldTime  = 0;
+  private fireHolding   = false;
+  private fireArmed     = false;
+  private pendingFireCharge: number | null = null;
   private grabPressed   = false;     // one-shot: true only on the frame E is first pressed
 
   public mouseSensitivity = 0.002;
@@ -35,11 +39,27 @@ export class InputManager {
     });
 
     window.addEventListener('mousedown', (e) => {
-      if (e.button === 0) this.keys.add('MouseLeft');
+      if (e.button === 0) {
+        this.keys.add('MouseLeft');
+        if (this.isFireReady()) {
+          this.fireHolding = true;
+          this.fireArmed = true;
+          this.fireHoldTime = 0;
+        }
+      }
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.keys.delete('MouseLeft');
+      if (e.button === 0) {
+        this.keys.delete('MouseLeft');
+        // Only fire if held ≥ minimum time
+        if (this.fireHolding && this.fireArmed && this.fireHoldTime >= REVOLVER_MIN_FIRE_TIME) {
+          this.pendingFireCharge = this.getFireCharge();
+        }
+        this.fireHolding = false;
+        this.fireArmed = false;
+        this.fireHoldTime = 0;
+      }
     });
   }
 
@@ -103,18 +123,35 @@ export class InputManager {
    */
   public isAiming(): boolean { return this.keys.has('Space'); }
 
-  /** Fire (LMB). Respects fire rate cooldown. Returns true once per allowed shot. */
-  public updateFireCooldown(dt: number): void { this.fireCooldown -= dt; }
-  public canFire(): boolean {
-    if (this.fireCooldown > 0) return false;
+  /** Fire (LMB). Hold to steady the shot; release to fire. */
+  public updateFireCooldown(dt: number): void {
+    this.fireCooldown -= dt;
+    if (this.fireHolding && this.isFireReady()) {
+      this.fireHoldTime += dt;
+    }
+  }
+
+  public isFireReady(): boolean {
+    return this.fireCooldown <= 0;
+  }
+
+  public commitFireCooldown(): void {
     this.fireCooldown = 1 / FIRE_RATE;
-    return true;
   }
-  /** True if LMB is held AND fire rate allows a shot this frame. */
-  public consumeFire(): boolean {
-    if (!this.keys.has('MouseLeft')) return false;
-    return this.canFire();
+
+  public consumeFireRelease(): number | null {
+    const charge = this.pendingFireCharge;
+    this.pendingFireCharge = null;
+    return charge;
   }
+
+  public getFireCharge(): number {
+    // charge 0→1 over REVOLVER_FOCUS_TIME seconds AFTER the minimum hold time
+    return Math.max(0, Math.min(1, (this.fireHoldTime - REVOLVER_MIN_FIRE_TIME) / REVOLVER_FOCUS_TIME));
+  }
+
+  /** True while LMB is physically held (no fire-rate gate). */
+  public isMouseLeft(): boolean { return this.keys.has('MouseLeft'); }
 
   /** Tab key — show scoreboard overlay */
   public isTabHeld(): boolean { return this.keys.has('Tab'); }
@@ -122,6 +159,12 @@ export class InputManager {
   // ── Pointer lock ──────────────────────────────────────────────────
   public lockPointer(canvas: HTMLCanvasElement): void {
     void canvas.requestPointerLock();
+  }
+
+  public unlockPointer(): void {
+    if (document.pointerLockElement) {
+      void document.exitPointerLock();
+    }
   }
 
   public isLocked(): boolean {

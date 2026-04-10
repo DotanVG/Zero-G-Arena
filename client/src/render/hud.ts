@@ -4,6 +4,11 @@ export type GamePhase = 'LOBBY' | 'COUNTDOWN' | 'PLAYING' | 'ROUND_END';
 
 export class HUD {
   private el: HTMLDivElement;
+  private isFirstRound = true;
+  private objTypewriterIdx = 0;
+  private objTypewriterTimer = 0;
+  private prevPhase: GamePhase = 'LOBBY';
+  private static readonly OBJECTIVE_TEXT = 'Objective — Breach Enemy Portal or Freeze them ALL';
 
   public constructor() {
     this.el = document.createElement('div');
@@ -20,22 +25,32 @@ export class HUD {
     });
 
     this.el.innerHTML = `
-      <!-- Click-to-play start overlay -->
-      <div id="hud-start" style="
-        position:absolute;inset:0;display:flex;flex-direction:column;
-        align-items:center;justify-content:center;
-        background:rgba(0,0,0,0.7);font-size:28px;letter-spacing:0.06em;
-      ">
-        <div style="color:#00ffff;text-shadow:0 0 20px #00ffff;margin-bottom:12px;">ORBITAL BREACH</div>
-        <div style="font-size:16px;color:#aaa;">Click anywhere to enter breach protocol</div>
-      </div>
-
       <!-- Countdown (big centre) -->
       <div id="hud-countdown" style="
         display:none;position:absolute;left:50%;top:38%;
         transform:translate(-50%,-50%);font-size:90px;font-weight:bold;
         color:#fff;text-shadow:0 0 40px #00ffff;letter-spacing:0.05em;
       ">10</div>
+
+      <div id="hud-fade" style="
+        display:block;position:absolute;inset:0;background:#04070d;opacity:0;
+        transition:none;pointer-events:none;
+      "></div>
+
+      <!-- First-round objective typewriter -->
+      <div id="hud-objective" style="
+        display:none;position:absolute;left:50%;top:58%;
+        transform:translateX(-50%);font-size:16px;letter-spacing:3px;
+        color:#aaffff;text-shadow:0 0 12px #00ffff;text-align:center;
+        max-width:600px;
+      "></div>
+
+      <!-- All-frozen countdown overlay -->
+      <div id="hud-all-frozen" style="
+        display:none;position:absolute;left:50%;top:26%;
+        transform:translateX(-50%);font-size:18px;letter-spacing:4px;
+        color:#ffff44;text-shadow:0 0 18px #ffcc00;text-align:center;
+      "></div>
 
       <!-- Crosshair -->
       <div id="hud-crosshair" style="
@@ -105,11 +120,11 @@ export class HUD {
   // ── Public API ────────────────────────────────────────────────────
 
   public showStart(): void {
-    this.show('hud-start');
+    // Legacy no-op. Main menu owns the entry flow now.
   }
 
   public hideStart(): void {
-    this.hide('hud-start');
+    // Legacy no-op. Main menu owns the entry flow now.
   }
 
   public showRoundEnd(message: string): void {
@@ -137,12 +152,16 @@ export class HUD {
     tabHeld: boolean;
     ownTeam: FullPlayerInfo[];
     enemyTeam: EnemyPlayerInfo[];
+    dt: number;
+    allFrozenTeam?: 0 | 1;
+    allFrozenTimer?: number;
   }): void {
     const {
       score, phase, countdown, playerPhase,
       launchPower, maxLaunchPower,
       nearBar, inBreach, damage,
       tabHeld, ownTeam, enemyTeam,
+      dt, allFrozenTeam, allFrozenTimer,
     } = opts;
 
     // Score
@@ -151,14 +170,68 @@ export class HUD {
       scoreEl.textContent = `${score.team0}  —  ${score.team1}`;
     }
 
+    // Phase transition tracking
+    const phaseChanged = phase !== this.prevPhase;
+    if (phaseChanged) {
+      if (this.prevPhase === 'ROUND_END' && phase === 'COUNTDOWN') {
+        this.isFirstRound = false;
+      }
+      this.prevPhase = phase;
+    }
+
     // Countdown
     const cdEl = this.q<HTMLDivElement>('hud-countdown');
+    const fadeEl = this.q<HTMLDivElement>('hud-fade');
+    const objEl = this.q<HTMLDivElement>('hud-objective');
     if (cdEl) {
-      if (phase === 'COUNTDOWN' && countdown > 0) {
+      if (phase === 'COUNTDOWN' && countdown >= 1) {
         cdEl.style.display = 'block';
         cdEl.textContent = String(Math.ceil(countdown));
       } else {
         cdEl.style.display = 'none';
+      }
+    }
+    if (fadeEl) {
+      if (this.isFirstRound && phase === 'COUNTDOWN') {
+        // Start black, fade to transparent over the countdown duration
+        const FADE_DURATION = 4.0;
+        const elapsed = (5 - countdown);  // COUNTDOWN_SECONDS=5
+        const opacity = Math.max(0, 1 - elapsed / FADE_DURATION);
+        fadeEl.style.opacity = String(opacity);
+      } else if (phase === 'PLAYING' || phase === 'ROUND_END') {
+        fadeEl.style.opacity = '0';
+      }
+      // Non-first rounds: no fade
+    }
+    // Objective typewriter on first round countdown
+    if (objEl) {
+      if (this.isFirstRound && phase === 'COUNTDOWN') {
+        objEl.style.display = 'block';
+        const fullText = HUD.OBJECTIVE_TEXT;
+        this.objTypewriterTimer += dt;
+        const charsPerSec = 20;
+        this.objTypewriterIdx = Math.min(
+          fullText.length,
+          Math.floor(this.objTypewriterTimer * charsPerSec),
+        );
+        objEl.textContent = fullText.slice(0, this.objTypewriterIdx);
+      } else if (phase === 'PLAYING') {
+        objEl.style.display = 'none';
+        this.objTypewriterIdx = 0;
+        this.objTypewriterTimer = 0;
+      } else if (!this.isFirstRound) {
+        objEl.style.display = 'none';
+      }
+    }
+
+    // All-frozen overlay
+    const allFrozenEl = this.q<HTMLDivElement>('hud-all-frozen');
+    if (allFrozenEl) {
+      if (allFrozenTeam !== undefined && allFrozenTimer !== undefined) {
+        allFrozenEl.style.display = 'block';
+        allFrozenEl.textContent = `ALL ENEMIES FROZEN — BREACH IN ${Math.ceil(allFrozenTimer)}s`;
+      } else {
+        allFrozenEl.style.display = 'none';
       }
     }
 
@@ -176,7 +249,7 @@ export class HUD {
 
       if (playerPhase === 'AIMING') {
         showPrompt = true;
-        promptText = '↓ Pull mouse to charge power  ·  Release [SPACE] to launch';
+        promptText = 'Hold [SPACE] — charging launch  ·  Release to fire';
         grabEl.style.fontSize = '14px';
         grabEl.style.color    = '#ffff88';
         grabEl.style.textShadow = '0 0 8px #ffaa00';
@@ -228,8 +301,10 @@ export class HUD {
       if (damage.rightArm) {
         parts.push('🦾 RIGHT ARM — NO FIRE');
       }
-      if (damage.legs) {
-        parts.push('🦵 LEGS — REDUCED POWER');
+      if (damage.legs === 1) {
+        parts.push('🦵 LEG HIT — −25% LAUNCH');
+      } else if (damage.legs >= 2) {
+        parts.push('🦵 BOTH LEGS — −50% LAUNCH');
       }
       dmgEl.innerHTML = parts.join('<br>');
     }

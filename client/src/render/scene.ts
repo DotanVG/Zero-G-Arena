@@ -18,6 +18,14 @@ export class SceneManager {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    Object.assign(this.renderer.domElement.style, {
+      position: 'fixed',
+      inset: '0',
+      width: '100vw',
+      height: '100vh',
+      display: 'block',
+      outline: 'none',
+    });
     document.body.appendChild(this.renderer.domElement);
 
     const directional = new THREE.DirectionalLight(0xffffff, 1.2);

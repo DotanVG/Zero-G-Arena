@@ -14,7 +14,9 @@ import {
   makeArenaMaterial,
   makeObstacleMaterial,
   makeBreachRoomMaterial,
+  makeBreachEdgeMaterial,
 } from '../render/materials';
+import type { BarGrabPoint } from '../../../shared/player-logic';
 
 interface BreachRoom {
   team: 0 | 1;
@@ -157,6 +159,13 @@ export class Arena {
       const backY = openSign * -hd;
       addWall(BREACH_ROOM_W, BREACH_ROOM_D, 0, backY, 0, openSign === 1 ? 0 : Math.PI, 0, 0);
     }
+
+    // Neon edge wireframe on the room interior
+    const edgeGeo = new THREE.BoxGeometry(BREACH_ROOM_W, BREACH_ROOM_H, BREACH_ROOM_D);
+    const edges    = new THREE.EdgesGeometry(edgeGeo);
+    const edgeMat  = makeBreachEdgeMaterial(team);
+    const edgeMesh = new THREE.LineSegments(edges, edgeMat);
+    group.add(edgeMesh);
   }
 
   /** One bar on the back wall of the breach room, facing toward the portal. */
@@ -220,10 +229,11 @@ export class Arena {
     const room = this.breachRooms[team];
     if (!room) return false;
     const c = room.center;
+    const half = this.getBreachHalfExtents(room.openAxis);
     return (
-      Math.abs(pos.x - c.x) < BREACH_ROOM_W / 2 &&
-      Math.abs(pos.y - c.y) < BREACH_ROOM_H / 2 &&
-      Math.abs(pos.z - c.z) < BREACH_ROOM_D / 2
+      Math.abs(pos.x - c.x) < half.x &&
+      Math.abs(pos.y - c.y) < half.y &&
+      Math.abs(pos.z - c.z) < half.z
     );
   }
 
@@ -233,20 +243,10 @@ export class Arena {
    */
   public isDeepInBreachRoom(pos: THREE.Vector3, team: 0 | 1, minDepth: number): boolean {
     const room = this.breachRooms[team];
-    if (!room) return false;
-    const c   = room.center;
-    const ax  = room.openAxis;
-
-    // Depth along goal axis: must be minDepth units inside the open face
-    if (Math.abs(pos[ax] - c[ax]) >= BREACH_ROOM_D / 2 - minDepth) return false;
-
-    // Lateral bounds (correct per axis)
-    for (const a of (['x', 'y', 'z'] as const)) {
-      if (a === ax) continue;
-      const half = a === 'y' ? BREACH_ROOM_H / 2 : BREACH_ROOM_W / 2;
-      if (Math.abs(pos[a] - c[a]) >= half) return false;
-    }
-    return true;
+    if (!room || !this.isInBreachRoom(pos, team)) return false;
+    const facePos = room.center[room.openAxis] + room.openSign * BREACH_ROOM_D / 2;
+    const depthInside = (facePos - pos[room.openAxis]) * room.openSign;
+    return depthInside >= minDepth;
   }
 
   public getBreachRoomCenter(team: 0 | 1): THREE.Vector3 {
@@ -261,14 +261,15 @@ export class Arena {
     return this.breachRooms[team]?.openSign ?? (team === 0 ? 1 : -1);
   }
 
-  public getNearestBar(pos: THREE.Vector3, radius: number): THREE.Vector3 | null {
-    let nearest: THREE.Vector3 | null = null;
+  public getNearestBar(pos: THREE.Vector3, radius: number): BarGrabPoint | null {
+    let nearest: BarGrabPoint | null = null;
     let best = radius * radius;
     for (const bar of this.barObjects) {
-      const d2 = pos.distanceToSquared(bar.getWorldPosition());
+      const grabPoint = bar.getGrabPoint();
+      const d2 = pos.distanceToSquared(grabPoint.pos as THREE.Vector3);
       if (d2 < best) {
         best = d2;
-        nearest = bar.getWorldPosition();
+        nearest = grabPoint;
       }
     }
     return nearest;
@@ -376,5 +377,13 @@ export class Arena {
 
   public getCurrentStateId(): string {
     return this.currentLayout ? String(this.currentLayout.seed) : 'none';
+  }
+
+  private getBreachHalfExtents(openAxis: 'x' | 'y' | 'z'): THREE.Vector3 {
+    return new THREE.Vector3(
+      openAxis === 'x' ? BREACH_ROOM_D / 2 : BREACH_ROOM_W / 2,
+      openAxis === 'y' ? BREACH_ROOM_D / 2 : BREACH_ROOM_H / 2,
+      openAxis === 'z' ? BREACH_ROOM_D / 2 : BREACH_ROOM_W / 2,
+    );
   }
 }

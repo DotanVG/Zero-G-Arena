@@ -46,6 +46,11 @@ export function makeBreachRoomMaterial(team: 0 | 1): THREE.MeshBasicMaterial {
   });
 }
 
+export function makeBreachEdgeMaterial(team: 0 | 1): THREE.LineBasicMaterial {
+  const color = team === 0 ? 0x00ffff : 0xff00ff;
+  return new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
+}
+
 export function makeBarMaterial(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     color: 0xff9900,

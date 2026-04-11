@@ -54,7 +54,7 @@ export class App {
 
   private beginNewRound(): void {
     this.hud.hideRoundEnd();
-    this.cam.resetZeroGFlip();   // allow one-time 90° flip on first breach-room exit
+    this.cam.resetZeroGFlip();   // reset zero-G seed so first breach exit re-seeds from gravity orientation
     // Clear projectiles from previous round
     for (const p of this.projectiles) p.dispose();
     this.projectiles = [];

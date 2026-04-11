@@ -10,11 +10,10 @@ import { clamp } from './util/math';
  *
  * ZERO-G MODE   (all other phases)
  *   – Free quaternion rotation, no clamping, full 360°.
- *   – When entering zero-G the camera pitches 90° so the enemy portal
- *     (the direction the player was just facing) becomes the bottom of
- *     the viewport instead of the horizon.
+ *   – Camera orientation is seeded from wherever the player was looking
+ *     when they exited the breach room — own or enemy.
  */
-const TRANSITION_DURATION = 0.35;  // seconds — fast but perceptible
+const TRANSITION_DURATION = 0.6;   // seconds — return-to-breach sweep duration
 
 export class CameraController {
   // ── Gravity mode state ────────────────────────────────────────────
@@ -24,12 +23,11 @@ export class CameraController {
   // ── Zero-G mode state ─────────────────────────────────────────────
   private zeroGMode = false;
   private zeroGQuat = new THREE.Quaternion();
-  private hasFlippedForZeroG = false;  // true after first breach-room exit this round
 
-  // ── Orientation transition ─────────────────────────────────────────
-  private transitioning = false;
-  private transitionFrom = new THREE.Quaternion();
-  private transitionProgress = 0;  // 0 → 1
+  // ── Orientation transition: arena → breach (easeOutQuint) ─────────
+  private returnTransitioning = false;
+  private returnTransitionFrom = new THREE.Quaternion();  // zeroGQuat snapshot
+  private returnTransitionProgress = 0;  // 0 → 1
 
   public constructor(private camera: THREE.PerspectiveCamera) {}
 
@@ -38,39 +36,25 @@ export class CameraController {
   /**
    * Call once per frame BEFORE applyMouseDelta.
    * Handles the transition between breach-room (gravity) and arena (zero-G) cameras.
-   */
-  /**
-   * Call once per frame BEFORE applyMouseDelta.
-   * Handles the transition between breach-room (gravity) and arena (zero-G) cameras.
    *
-   * The 90° flip happens ONCE per round (first exit from own breach room).
-   * Subsequent exits (e.g. after grabbing a bar back inside) preserve the
-   * existing zero-G quaternion so orientation never jumps unexpectedly.
+   * Always seeds zeroGQuat from the current gravity-mode orientation on exit,
+   * so the camera stays exactly where the player was looking — in any breach room.
    */
   public setZeroGMode(active: boolean): void {
     if (active === this.zeroGMode) return;
 
     if (active) {
-      // Capture current orientation as transition start
-      this.transitionFrom.copy(this.gravityQuaternion());
-
-      if (!this.hasFlippedForZeroG) {
-        // First exit this round: seed from breach-room orientation and flip 90°
-        // so the enemy portal (what was "forward") becomes the bottom of the view.
-        this.zeroGQuat.copy(this.gravityQuaternion());
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.zeroGQuat);
-        const q90   = new THREE.Quaternion().setFromAxisAngle(right, Math.PI / 2);
-        this.zeroGQuat.premultiply(q90);
-        this.zeroGQuat.normalize();
-        this.hasFlippedForZeroG = true;
-      }
-      // Subsequent exits: keep existing zeroGQuat — no jump in orientation
-
-      // Start slerp transition toward the target zero-G orientation
-      this.transitioning = true;
-      this.transitionProgress = 0;
+      // Seed zero-G orientation from the current breach-room look direction.
+      // No flip applied — camera is exactly where the player was looking.
+      this.zeroGQuat.copy(this.gravityQuaternion());
     } else {
-      // Leaving zero-G: preserve the current horizontal facing for breach-room controls.
+      // Snapshot the current zero-G orientation as the start of the return slerp
+      this.returnTransitionFrom.copy(this.zeroGQuat);
+      this.returnTransitioning = true;
+      this.returnTransitionProgress = 0;
+
+      // Extract yaw from zeroGQuat so gravity-mode WASD controls start correctly
+      // (this is the *destination* orientation that the slerp converges toward)
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.zeroGQuat);
       const flatForward = new THREE.Vector3(forward.x, 0, forward.z);
       if (flatForward.lengthSq() > 1e-6) {
@@ -78,18 +62,15 @@ export class CameraController {
         this.yaw = Math.atan2(-flatForward.x, -flatForward.z);
       }
       this.pitch = 0;
-      // No transition needed going back to breach room — physics snaps player to floor anyway
-      this.transitioning = false;
     }
 
     this.zeroGMode = active;
   }
 
-  /** Call at the start of each new round to re-enable the one-time 90° flip. */
+  /** Call at the start of each new round to reset zero-G state. */
   public resetZeroGFlip(): void {
-    this.hasFlippedForZeroG = false;
-    this.transitioning = false;
-    this.transitionProgress = 0;
+    this.returnTransitioning = false;
+    this.returnTransitionProgress = 0;
   }
 
   /**
@@ -97,11 +78,9 @@ export class CameraController {
    * Returns true while a transition is in progress.
    */
   public tickTransition(dt: number): boolean {
-    if (!this.transitioning) return false;
-    this.transitionProgress = Math.min(1, this.transitionProgress + dt / TRANSITION_DURATION);
-    if (this.transitionProgress >= 1) {
-      this.transitioning = false;
-    }
+    if (!this.returnTransitioning) return false;
+    this.returnTransitionProgress = Math.min(1, this.returnTransitionProgress + dt / TRANSITION_DURATION);
+    if (this.returnTransitionProgress >= 1) this.returnTransitioning = false;
     return true;
   }
 
@@ -133,14 +112,16 @@ export class CameraController {
 
   /** Combined rotation quaternion (mode-aware, slerped during transitions). */
   public getQuaternion(): THREE.Quaternion {
-    if (this.zeroGMode && this.transitioning) {
-      // Cubic easeInOut for a snappy-but-smooth disorienting sweep
-      const t = this.transitionProgress;
-      const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    if (!this.zeroGMode && this.returnTransitioning) {
+      // easeOutQuint: fast start, smooth settle — camera "catches up" to the
+      // landing body as gravity snaps the player back to the breach-room floor.
+      const t = this.returnTransitionProgress;
+      const ease = 1 - Math.pow(1 - t, 5);
       return new THREE.Quaternion()
-        .copy(this.transitionFrom)
-        .slerp(this.zeroGQuat, ease);
+        .copy(this.returnTransitionFrom)
+        .slerp(this.gravityQuaternion(), ease);
     }
+
     return this.zeroGMode ? this.zeroGQuat.clone() : this.gravityQuaternion();
   }
 

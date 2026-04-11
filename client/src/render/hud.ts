@@ -20,16 +20,6 @@ export class HUD {
     });
 
     this.el.innerHTML = `
-      <!-- Click-to-play start overlay -->
-      <div id="hud-start" style="
-        position:absolute;inset:0;display:flex;flex-direction:column;
-        align-items:center;justify-content:center;
-        background:rgba(0,0,0,0.7);font-size:28px;letter-spacing:0.06em;
-      ">
-        <div style="color:#00ffff;text-shadow:0 0 20px #00ffff;margin-bottom:12px;">ORBITAL BREACH</div>
-        <div style="font-size:16px;color:#aaa;">Click anywhere to enter breach protocol</div>
-      </div>
-
       <!-- Countdown (big centre) -->
       <div id="hud-countdown" style="
         display:none;position:absolute;left:50%;top:38%;
@@ -103,14 +93,6 @@ export class HUD {
   }
 
   // ── Public API ────────────────────────────────────────────────────
-
-  public showStart(): void {
-    this.show('hud-start');
-  }
-
-  public hideStart(): void {
-    this.hide('hud-start');
-  }
 
   public showRoundEnd(message: string): void {
     const el = this.q<HTMLDivElement>('hud-round-end');

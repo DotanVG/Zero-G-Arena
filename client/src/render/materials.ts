@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export function makeArenaMaterial(): THREE.LineBasicMaterial {
-  return new THREE.LineBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.6 });
+  return new THREE.LineBasicMaterial({ color: 0x4a7a9b, transparent: true, opacity: 0.8 });
 }
 
 export function makeObstacleMaterial(): THREE.MeshStandardMaterial {
@@ -38,13 +38,13 @@ export function makeGhostMaterial(team: 0 | 1): THREE.MeshStandardMaterial {
 }
 
 export function makeBreachRoomMaterial(team: 0 | 1): THREE.MeshStandardMaterial {
-  // Subtle team-tinted walls — emissive so they're visible even in low ambient light
-  const color   = team === 0 ? 0x0a2a3a : 0x2a0a2a;
+  // Team-tinted walls — emissive glow makes them readable against the dark scene
+  const color    = team === 0 ? 0x0a2a3a : 0x2a0a2a;
   const emissive = team === 0 ? 0x00ffff : 0xff00ff;
   return new THREE.MeshStandardMaterial({
     color,
     emissive,
-    emissiveIntensity: 0.06,
+    emissiveIntensity: 0.28,
     side: THREE.DoubleSide,
   });
 }

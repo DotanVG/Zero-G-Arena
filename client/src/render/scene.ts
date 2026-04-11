@@ -24,7 +24,7 @@ export class SceneManager {
     directional.position.set(10, 20, 10);
     this.scene.add(directional);
 
-    this.scene.add(new THREE.AmbientLight(0x334466, 0.5));
+    this.scene.add(new THREE.AmbientLight(0x445577, 1.0));
 
     window.addEventListener("resize", () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;

@@ -2,9 +2,9 @@ node_modules
 dist
 .env
 .vercel
-.codex-prompts/
 PlanTracker.md
 CLAUDE.md
+.impeccable.md
 *.log
 # Root-level dev tooling (concurrently) — not part of deployable code
 /package.json

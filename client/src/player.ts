@@ -35,6 +35,10 @@ const ANIM_RUN_HOLD = 'Alien_RunHold';
 const ANIM_STANDING = 'Alien_Standing';
 const ANIM_DEATH = 'Alien_Death';
 const ANIM_FADE_SECONDS = 0.16;
+const BREACH_BREATH_SPEED = 1.8;
+const BREACH_BREATH_ABDOMEN_Y = 0.012;
+const BREACH_BREATH_TORSO_Y = 0.008;
+const BREACH_BREATH_NECK_Y = 0.004;
 const GRAB_ROTATION_SMOOTHING = 0.0008;
 const BAR_HOLD_HIPS_OFFSET = new THREE.Euler(-0.42, -0.02, -0.08);
 const BAR_HOLD_ABDOMEN_OFFSET = new THREE.Euler(0.56, 0.0, -0.18);
@@ -72,6 +76,7 @@ type AnimatedRig = {
   mixer: THREE.AnimationMixer;
   actions: Map<string, THREE.AnimationAction>;
   bones: Partial<Record<PoseBoneName, THREE.Bone>>;
+  breathingBasePositions: Partial<Record<'Abdomen' | 'Torso' | 'Neck', THREE.Vector3>>;
 };
 
 export class LocalPlayer {
@@ -106,6 +111,7 @@ export class LocalPlayer {
   private animatedRigs: AnimatedRig[] = [];
   private currentAnimation = ANIM_IDLE_HOLD;
   private currentAnimationTime = 0;
+  private breachBreathTime = 0;
   private visualQuaternion = new THREE.Quaternion();
 
   public onRoundWin: ((team: 0 | 1) => void) | null = null;
@@ -421,6 +427,7 @@ export class LocalPlayer {
       mixer,
       actions,
       bones: this.collectPoseBones(root),
+      breathingBasePositions: this.captureBreathingBasePositions(root),
     });
 
     const action = actions.get(this.currentAnimation) ?? actions.get(ANIM_IDLE_HOLD);
@@ -433,6 +440,8 @@ export class LocalPlayer {
 
   private updateAnimation(input: InputManager, dt: number): void {
     if (this.phase === 'GRABBING' || this.phase === 'AIMING') {
+      this.breachBreathTime = 0;
+      this.resetBreachBreathing();
       if (!this.grabPoseLocked) {
         this.lockGrabPose();
       }
@@ -448,6 +457,14 @@ export class LocalPlayer {
     this.currentAnimationTime += dt;
     for (const rig of this.animatedRigs) {
       rig.mixer.update(dt);
+    }
+
+    if (this.isBreachIdle(input)) {
+      this.breachBreathTime += dt;
+      this.applyBreachIdleBreathing(this.breachBreathTime);
+    } else {
+      this.breachBreathTime = 0;
+      this.resetBreachBreathing();
     }
   }
 
@@ -470,6 +487,45 @@ export class LocalPlayer {
     }
 
     return ANIM_IDLE_HOLD;
+  }
+
+  private isBreachIdle(input: InputManager): boolean {
+    if (this.phase !== 'BREACH' || !this.onGround) {
+      return false;
+    }
+
+    const walk = input.getWalkAxes();
+    return walk.x === 0 && walk.z === 0 && !input.isJumping();
+  }
+
+  private applyBreachIdleBreathing(time: number): void {
+    const breath = 0.5 + 0.5 * Math.sin(time * BREACH_BREATH_SPEED);
+
+    for (const rig of this.animatedRigs) {
+      this.applyBreathingPosition(
+        rig.bones.Abdomen,
+        rig.breathingBasePositions.Abdomen,
+        BREACH_BREATH_ABDOMEN_Y * breath,
+      );
+      this.applyBreathingPosition(
+        rig.bones.Torso,
+        rig.breathingBasePositions.Torso,
+        BREACH_BREATH_TORSO_Y * breath,
+      );
+      this.applyBreathingPosition(
+        rig.bones.Neck,
+        rig.breathingBasePositions.Neck,
+        BREACH_BREATH_NECK_Y * breath,
+      );
+    }
+  }
+
+  private resetBreachBreathing(): void {
+    for (const rig of this.animatedRigs) {
+      this.resetBreathingPosition(rig.bones.Abdomen, rig.breathingBasePositions.Abdomen);
+      this.resetBreathingPosition(rig.bones.Torso, rig.breathingBasePositions.Torso);
+      this.resetBreathingPosition(rig.bones.Neck, rig.breathingBasePositions.Neck);
+    }
   }
 
   private playAnimation(name: string): void {
@@ -518,6 +574,45 @@ export class LocalPlayer {
     }
 
     return bones;
+  }
+
+  private captureBreathingBasePositions(
+    root: THREE.Group,
+  ): Partial<Record<'Abdomen' | 'Torso' | 'Neck', THREE.Vector3>> {
+    const names = ['Abdomen', 'Torso', 'Neck'] as const;
+    const basePositions: Partial<Record<'Abdomen' | 'Torso' | 'Neck', THREE.Vector3>> = {};
+
+    for (const name of names) {
+      const bone = root.getObjectByName(name);
+      if (bone instanceof THREE.Bone) {
+        basePositions[name] = bone.position.clone();
+      }
+    }
+
+    return basePositions;
+  }
+
+  private applyBreathingPosition(
+    bone: THREE.Bone | undefined,
+    basePosition: THREE.Vector3 | undefined,
+    yOffset: number,
+  ): void {
+    if (!bone || !basePosition) {
+      return;
+    }
+
+    bone.position.set(basePosition.x, basePosition.y + yOffset, basePosition.z);
+  }
+
+  private resetBreathingPosition(
+    bone: THREE.Bone | undefined,
+    basePosition: THREE.Vector3 | undefined,
+  ): void {
+    if (!bone || !basePosition) {
+      return;
+    }
+
+    bone.position.copy(basePosition);
   }
 
   private applyBarHoldPose(): void {

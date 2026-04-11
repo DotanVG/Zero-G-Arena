@@ -100,9 +100,6 @@ export class LocalPlayer {
   private onGround = false;
 
   private mesh: THREE.Group;
-  private arrowLine: THREE.Line | null = null;
-  private arrowPositions: Float32Array | null = null;
-  private readonly scene: THREE.Scene;
   private leftHandGripLocal = DEFAULT_LEFT_HAND_GRIP_LOCAL.clone();
   private grabHandGripLocal: THREE.Vector3 | null = null;
   private grabPoseLocked = false;
@@ -114,7 +111,6 @@ export class LocalPlayer {
   public onRoundWin: ((team: 0 | 1) => void) | null = null;
 
   public constructor(scene: THREE.Scene) {
-    this.scene = scene;
     this.mesh = new THREE.Group();
 
     const loader = new GLTFLoader();
@@ -359,8 +355,6 @@ export class LocalPlayer {
     this.launchPower += dy * LAUNCH_AIM_SENSITIVITY;
     this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
 
-    this.updateArrow(cam.getForward());
-
     if (!input.isAiming()) {
       this.launch(cam);
     }
@@ -390,7 +384,6 @@ export class LocalPlayer {
     this.lockGrabPose();
     const visualQuat = this.computeVisualQuaternion(cam, 1 / 60);
     this.lockGripToBar(visualQuat);
-    this.hideArrow();
   }
 
   private launch(cam: CameraController): void {
@@ -403,73 +396,6 @@ export class LocalPlayer {
     this.grabHandGripLocal = null;
     this.grabPoseLocked = false;
     this.phase = 'FLOATING';
-    this.hideArrow();
-  }
-
-  private ensureArrow(): void {
-    if (this.arrowLine) {
-      return;
-    }
-
-    const POINTS = 20;
-    this.arrowPositions = new Float32Array(POINTS * 3);
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(this.arrowPositions, 3));
-
-    const colors = new Float32Array(POINTS * 3);
-    const tipColor =
-      this.team === 0 ? new THREE.Color(0x00ffff) : new THREE.Color(0xff00ff);
-    for (let i = 0; i < POINTS; i++) {
-      const t = i / (POINTS - 1);
-      const col = new THREE.Color().lerpColors(
-        new THREE.Color(0xffffff),
-        tipColor,
-        t,
-      );
-      colors[i * 3] = col.r;
-      colors[i * 3 + 1] = col.g;
-      colors[i * 3 + 2] = col.b;
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const mat = new THREE.LineBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.8,
-    });
-
-    this.arrowLine = new THREE.Line(geo, mat);
-    this.scene.add(this.arrowLine);
-  }
-
-  private updateArrow(forward: THREE.Vector3): void {
-    this.ensureArrow();
-    const line = this.arrowLine!;
-    const positions = this.arrowPositions!;
-    const POINTS = 20;
-    const maxLen = 18;
-    const scale = this.launchPower / (this.maxLaunchPower() || 1);
-
-    for (let i = 0; i < POINTS; i++) {
-      const t = (i / (POINTS - 1)) * scale * maxLen;
-      const pt = this.phys.pos.clone().addScaledVector(forward, t);
-      positions[i * 3] = pt.x;
-      positions[i * 3 + 1] = pt.y;
-      positions[i * 3 + 2] = pt.z;
-    }
-
-    (line.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    line.visible = true;
-
-    const pulse = 0.35 + 0.65 * Math.abs(Math.sin(Date.now() * 0.005));
-    (line.material as THREE.LineBasicMaterial).opacity = pulse;
-  }
-
-  private hideArrow(): void {
-    if (this.arrowLine) {
-      this.arrowLine.visible = false;
-    }
   }
 
   private captureLeftHandGripOffset(alien: THREE.Group): void {
@@ -723,7 +649,6 @@ export class LocalPlayer {
         this.grabbedBarPos = null;
         this.grabHandGripLocal = null;
         this.grabPoseLocked = false;
-        this.hideArrow();
         break;
       case 'rightArm':
         this.damage.rightArm = true;
@@ -735,7 +660,6 @@ export class LocalPlayer {
           this.grabbedBarPos = null;
           this.grabHandGripLocal = null;
           this.grabPoseLocked = false;
-          this.hideArrow();
         }
         break;
       case 'legs':
@@ -785,7 +709,6 @@ export class LocalPlayer {
     this.grabHandGripLocal = null;
     this.grabPoseLocked = false;
     this.currentBreachTeam = this.team;
-    this.hideArrow();
     this.phys.vel.set(0, 0, 0);
 
     const center   = arena.getBreachRoomCenter(this.team);

@@ -5,6 +5,7 @@ import { makeBarMaterial } from '../render/materials';
 export class BarObject {
   private mesh: THREE.Mesh;
   private worldPos: THREE.Vector3;
+  private direction: THREE.Vector3;
   private pulseTime = 0;
 
   public constructor(
@@ -13,13 +14,14 @@ export class BarObject {
     normal: { x: number; y: number; z: number },
   ) {
     this.worldPos = worldPos.clone();
+    this.direction = new THREE.Vector3(normal.x, normal.y, normal.z).normalize();
 
     const geo = new THREE.CylinderGeometry(BAR_RADIUS, BAR_RADIUS, BAR_LENGTH, 8);
     this.mesh = new THREE.Mesh(geo, makeBarMaterial());
 
     // Orient cylinder along the surface normal (default cylinder axis is Y)
     const up = new THREE.Vector3(0, 1, 0);
-    const n = new THREE.Vector3(normal.x, normal.y, normal.z).normalize();
+    const n = this.direction;
     // Avoid degenerate quaternion when normal is exactly Y or -Y
     if (Math.abs(n.dot(up)) < 0.999) {
       this.mesh.quaternion.setFromUnitVectors(up, n);
@@ -33,6 +35,13 @@ export class BarObject {
 
   public getWorldPosition(): THREE.Vector3 {
     return this.worldPos.clone();
+  }
+
+  public getGrabPoint(): THREE.Vector3 {
+    // Grab the exposed tip rather than the bar center so the hand reads as
+    // holding the bar instead of intersecting it.
+    const tipOffset = BAR_LENGTH * 0.5 - BAR_RADIUS * 0.25;
+    return this.worldPos.clone().addScaledVector(this.direction, tipOffset);
   }
 
   /** Call once per frame to animate the pulsing emissive glow. */

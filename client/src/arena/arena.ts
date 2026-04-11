@@ -278,10 +278,11 @@ export class Arena {
     let nearest: THREE.Vector3 | null = null;
     let best = radius * radius;
     for (const bar of this.barObjects) {
-      const d2 = pos.distanceToSquared(bar.getWorldPosition());
+      const grabPoint = bar.getGrabPoint();
+      const d2 = pos.distanceToSquared(grabPoint);
       if (d2 < best) {
         best = d2;
-        nearest = bar.getWorldPosition();
+        nearest = grabPoint;
       }
     }
     return nearest;

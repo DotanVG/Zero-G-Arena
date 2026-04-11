@@ -26,6 +26,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export type HitZone = 'head' | 'body' | 'rightArm' | 'leftArm' | 'legs';
 
+const DEFAULT_LEFT_HAND_GRIP_LOCAL = new THREE.Vector3(-0.27, -0.322, 0.287);
+
 export class LocalPlayer {
   public phys: PhysicsState = {
     pos: new THREE.Vector3(0, 0, -15),
@@ -55,6 +57,7 @@ export class LocalPlayer {
   private arrowLine: THREE.Line | null = null;
   private arrowPositions: Float32Array | null = null;
   private readonly scene: THREE.Scene;
+  private leftHandGripLocal = DEFAULT_LEFT_HAND_GRIP_LOCAL.clone();
 
   public onRoundWin: ((team: 0 | 1) => void) | null = null;
 
@@ -74,6 +77,8 @@ export class LocalPlayer {
         alien.position.z = 0.3; // Push model behind the camera view
         // Face forward relative to camera
         alien.rotation.y = Math.PI;
+
+        this.captureLeftHandGripOffset(alien);
         this.mesh.add(alien);
       },
       undefined,
@@ -196,7 +201,7 @@ export class LocalPlayer {
     const nearBar = arena.getNearestBar(this.phys.pos, GRAB_RADIUS);
     if (nearBar && grabInput && this.canGrabBar()) {
       if (arena.isGoalDoorOpen(this.currentBreachTeam)) {
-        this.grabBar(nearBar);
+        this.grabBar(nearBar, cam);
         return;
       }
     }
@@ -249,21 +254,21 @@ export class LocalPlayer {
     const grabInput = input.consumeGrab();
     const nearBar = arena.getNearestBar(this.phys.pos, GRAB_RADIUS);
     if (nearBar && grabInput && this.canGrabBar()) {
-      this.grabBar(nearBar);
+      this.grabBar(nearBar, cam);
     }
   }
 
   private updateGrabbing(
     input: InputManager,
-    _cam: CameraController,
-    dt: number,
+    cam: CameraController,
+    _dt: number,
   ): void {
     if (!this.grabbedBarPos) {
       this.phase = 'FLOATING';
       return;
     }
 
-    this.phys.pos.lerp(this.grabbedBarPos, 1 - Math.pow(0.002, dt));
+    this.lockGripToBar(cam);
     this.phys.vel.set(0, 0, 0);
 
     // E releases the bar — stay at current bar position with zero velocity
@@ -282,15 +287,15 @@ export class LocalPlayer {
   private updateAiming(
     input: InputManager,
     cam: CameraController,
-    arena: Arena,
-    dt: number,
+    _arena: Arena,
+    _dt: number,
   ): void {
     if (!this.grabbedBarPos) {
       this.phase = 'FLOATING';
       return;
     }
 
-    this.phys.pos.lerp(this.grabbedBarPos, 1 - Math.pow(0.002, dt));
+    this.lockGripToBar(cam);
     this.phys.vel.set(0, 0, 0);
 
     const { dy } = input.consumeAimDelta();
@@ -321,10 +326,11 @@ export class LocalPlayer {
     }
   }
 
-  private grabBar(barPos: THREE.Vector3): void {
+  private grabBar(barPos: THREE.Vector3, cam: CameraController): void {
     this.grabbedBarPos = barPos.clone();
     this.phys.vel.set(0, 0, 0);
     this.phase = 'GRABBING';
+    this.lockGripToBar(cam);
     this.hideArrow();
   }
 
@@ -403,6 +409,33 @@ export class LocalPlayer {
     if (this.arrowLine) {
       this.arrowLine.visible = false;
     }
+  }
+
+  private captureLeftHandGripOffset(alien: THREE.Group): void {
+    alien.updateMatrixWorld(true);
+
+    const palm = alien.getObjectByName('PalmL');
+    const fingerTip = alien.getObjectByName('MiddleFinger4L');
+    if (!palm || !fingerTip) {
+      return;
+    }
+
+    const palmWorld = new THREE.Vector3();
+    const fingerTipWorld = new THREE.Vector3();
+    palm.getWorldPosition(palmWorld);
+    fingerTip.getWorldPosition(fingerTipWorld);
+
+    const gripWorld = palmWorld.lerp(fingerTipWorld, 0.55);
+    this.leftHandGripLocal.copy(this.mesh.worldToLocal(gripWorld));
+  }
+
+  private lockGripToBar(cam: CameraController): void {
+    if (!this.grabbedBarPos) {
+      return;
+    }
+
+    const handOffset = this.leftHandGripLocal.clone().applyQuaternion(cam.getQuaternion());
+    this.phys.pos.copy(this.grabbedBarPos).sub(handOffset);
   }
 
   public applyHit(zone: HitZone, impulse: THREE.Vector3): void {

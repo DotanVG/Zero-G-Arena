@@ -121,6 +121,7 @@ export class LocalPlayer {
   private breachBreathTime = 0;
   private thirdPersonGun: THREE.Group | null = null;
   private thirdPersonGunVisible = false;
+  private thirdPersonGunMuzzleLocal: THREE.Vector3 | null = null;
   private thirdPersonGunOffset = THIRD_PERSON_GUN_OFFSET.clone();
   private thirdPersonGunRotation = THIRD_PERSON_GUN_ROTATION.clone();
   private thirdPersonGunTuningEnabled = false;
@@ -477,6 +478,7 @@ export class LocalPlayer {
           obj.frustumCulled = false;
         });
 
+        this.thirdPersonGunMuzzleLocal = this.computeGunMuzzleLocal(gun);
         palm.add(gun);
         this.thirdPersonGun = gun;
         this.applyThirdPersonGunTransform();
@@ -880,6 +882,15 @@ export class LocalPlayer {
     }
   }
 
+  public getThirdPersonGunMuzzleWorldPosition(): THREE.Vector3 | null {
+    if (!this.thirdPersonGun || !this.thirdPersonGunMuzzleLocal) {
+      return null;
+    }
+
+    this.thirdPersonGun.updateMatrixWorld(true);
+    return this.thirdPersonGun.localToWorld(this.thirdPersonGunMuzzleLocal.clone());
+  }
+
   public toggleThirdPersonGunTuning(): boolean {
     this.thirdPersonGunTuningEnabled = !this.thirdPersonGunTuningEnabled;
     console.info(
@@ -961,6 +972,39 @@ export class LocalPlayer {
 
     this.thirdPersonGun.position.copy(this.thirdPersonGunOffset);
     this.thirdPersonGun.rotation.copy(this.thirdPersonGunRotation);
+  }
+
+  private computeGunMuzzleLocal(root: THREE.Group): THREE.Vector3 {
+    const muzzleNode = this.findGunMuzzleNode(root) ?? root;
+
+    if (muzzleNode instanceof THREE.Mesh && muzzleNode.geometry) {
+      if (!muzzleNode.geometry.boundingBox) {
+        muzzleNode.geometry.computeBoundingBox();
+      }
+      const bbox = muzzleNode.geometry.boundingBox;
+      if (bbox) {
+        const localPoint = new THREE.Vector3(
+          (bbox.min.x + bbox.max.x) * 0.5,
+          (bbox.min.y + bbox.max.y) * 0.5,
+          bbox.min.z - 0.02,
+        );
+        return root.worldToLocal(muzzleNode.localToWorld(localPoint));
+      }
+    }
+
+    root.updateMatrixWorld(true);
+    const bbox = new THREE.Box3().setFromObject(muzzleNode);
+    const center = bbox.getCenter(new THREE.Vector3());
+    const muzzleWorld = new THREE.Vector3(center.x, center.y, bbox.min.z - 0.02);
+    return root.worldToLocal(muzzleWorld);
+  }
+
+  private findGunMuzzleNode(root: THREE.Object3D): THREE.Object3D | null {
+    return root.getObjectByName('Muzzle.005')
+      ?? root.getObjectByName('Muzzle')
+      ?? root.getObjectByName('muzzle')
+      ?? root.children.find((child) => child.name.toLowerCase().includes('muzzle'))
+      ?? null;
   }
 
   public getScore(): number {

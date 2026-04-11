@@ -141,13 +141,17 @@ export class App {
         || this.player.phase === 'GRABBING'
         || this.player.phase === 'AIMING';
       if (this.phase === 'PLAYING' && inZeroG && this.player.canFire() && this.input.consumeFire()) {
-        // Spawn bullet at the tip of the gun (right (+X), down (-Y), forward (-Z) relative to camera)
-        const camQuat = this.cam.getQuaternion();
-        const gunTipOffset = new THREE.Vector3(0.2, -0.22, -0.6).applyQuaternion(camQuat);
-        const origin = this.player.getPosition().clone().add(gunTipOffset);
-        
         // Determine center of screen in the distance to aim perfectly
         const target = this.player.getPosition().clone().addScaledVector(this.cam.getForward(), 60.0);
+        const fallbackOrigin = this.player.getPosition()
+          .clone()
+          .add(new THREE.Vector3(0.2, -0.22, -0.6).applyQuaternion(this.cam.getQuaternion()));
+        const firstPersonOrigin = this.gun.getMuzzleWorldPosition();
+        const thirdPersonOrigin = this.player.getThirdPersonGunMuzzleWorldPosition();
+        const muzzleOrigin = (this.thirdPerson || (FEATURE_FLAGS.thirdPersonLookBehind && this.input.isSelfieHeld()))
+          ? thirdPersonOrigin
+          : firstPersonOrigin;
+        const origin = isFiniteVector3(muzzleOrigin) ? muzzleOrigin : fallbackOrigin;
         const direction = target.sub(origin).normalize();
 
         const color  = this.player.team === 0 ? 0x00ffff : 0xff00ff;
@@ -285,4 +289,11 @@ export class App {
       'P: close tuner',
     ].join('\n');
   }
+}
+
+function isFiniteVector3(value: THREE.Vector3 | null): value is THREE.Vector3 {
+  return value !== null
+    && Number.isFinite(value.x)
+    && Number.isFinite(value.y)
+    && Number.isFinite(value.z);
 }

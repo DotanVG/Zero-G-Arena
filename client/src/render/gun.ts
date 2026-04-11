@@ -22,6 +22,7 @@ const GUN_ROTATION = new THREE.Euler(0, -0.1, 0);
 export class GunViewModel {
   private root: THREE.Group | null = null;
   private _visible = true;
+  private muzzleLocal: THREE.Vector3 | null = null;
 
   public constructor(camera: THREE.PerspectiveCamera) {
     const loader = new GLTFLoader();
@@ -32,6 +33,7 @@ export class GunViewModel {
         this.root.scale.setScalar(GUN_SCALE);
         this.root.position.copy(GUN_OFFSET);
         this.root.rotation.copy(GUN_ROTATION);
+        this.muzzleLocal = this.computeMuzzleLocal(this.root);
 
         // Render on top of everything — never clip into walls
         this.root.traverse((obj) => {
@@ -57,5 +59,47 @@ export class GunViewModel {
   public setVisible(visible: boolean): void {
     this._visible = visible;
     if (this.root) this.root.visible = visible;
+  }
+
+  public getMuzzleWorldPosition(): THREE.Vector3 | null {
+    if (!this.root || !this.muzzleLocal) {
+      return null;
+    }
+
+    this.root.updateMatrixWorld(true);
+    return this.root.localToWorld(this.muzzleLocal.clone());
+  }
+
+  private computeMuzzleLocal(root: THREE.Group): THREE.Vector3 {
+    const muzzleNode = this.findMuzzleNode(root) ?? root;
+
+    if (muzzleNode instanceof THREE.Mesh && muzzleNode.geometry) {
+      if (!muzzleNode.geometry.boundingBox) {
+        muzzleNode.geometry.computeBoundingBox();
+      }
+      const bbox = muzzleNode.geometry.boundingBox;
+      if (bbox) {
+        const localPoint = new THREE.Vector3(
+          (bbox.min.x + bbox.max.x) * 0.5,
+          (bbox.min.y + bbox.max.y) * 0.5,
+          bbox.min.z - 0.02,
+        );
+        return root.worldToLocal(muzzleNode.localToWorld(localPoint));
+      }
+    }
+
+    root.updateMatrixWorld(true);
+    const bbox = new THREE.Box3().setFromObject(muzzleNode);
+    const center = bbox.getCenter(new THREE.Vector3());
+    const muzzleWorld = new THREE.Vector3(center.x, center.y, bbox.min.z - 0.02);
+    return root.worldToLocal(muzzleWorld);
+  }
+
+  private findMuzzleNode(root: THREE.Object3D): THREE.Object3D | null {
+    return root.getObjectByName('Muzzle.005')
+      ?? root.getObjectByName('Muzzle')
+      ?? root.getObjectByName('muzzle')
+      ?? root.children.find((child) => child.name.toLowerCase().includes('muzzle'))
+      ?? null;
   }
 }

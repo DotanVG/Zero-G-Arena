@@ -4,4 +4,5 @@ dist
 .vercel
 .codex-prompts/
 PlanTracker.md
+CLAUDE.md
 *.log

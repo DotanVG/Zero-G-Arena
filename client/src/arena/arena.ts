@@ -207,6 +207,28 @@ export class Arena {
     });
   }
 
+  /**
+   * Find the energy wall whose portal face is nearest `worldPos` and trigger
+   * an impact ring + sparkle effect on it. Call this from the game loop whenever
+   * a projectile hits a portal barrier AABB.
+   */
+  public triggerPortalImpact(worldPos: THREE.Vector3): void {
+    let nearest: typeof this.energyWalls[0] | null = null;
+    let bestDist = Infinity;
+    for (let i = 0; i < this.breachRooms.length; i++) {
+      const room = this.breachRooms[i];
+      const faceSign  = -room.openSign as 1 | -1;
+      const faceCoord = faceSign * (ARENA_SIZE / 2);
+      const d = room.openAxis === 'x'
+        ? Math.abs(worldPos.x - faceCoord)
+        : room.openAxis === 'y'
+          ? Math.abs(worldPos.y - faceCoord)
+          : Math.abs(worldPos.z - faceCoord);
+      if (d < bestDist) { bestDist = d; nearest = this.energyWalls[i]; }
+    }
+    nearest?.spawnImpact(worldPos);
+  }
+
   public getGoalPlanes(): GoalPlane[] {
     return this.goalPlanes;
   }

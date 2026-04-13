@@ -152,5 +152,5 @@ code is exempt (no WebGL in Node), but the logic it delegates to is not.
 | `arena-gen.test.ts` | `generateArenaLayout` | 7 |
 | `breachRoomQueries.test.ts` | `isInBreachRoom`, `isDeepInBreachRoom` | 6 |
 | `cameraYawFromBreach.test.ts` | `cameraYawFacingBreachOpening` | 3 |
-| `bulletCollision.test.ts` | `bulletHitsBox` (swept collision) | 7 |
-| **Total** | | **24** |
+| `bulletCollision.test.ts` | `bulletHitsBox`, `bulletHitPoint` (swept collision + surface point) | 12 |
+| **Total** | | **30** |

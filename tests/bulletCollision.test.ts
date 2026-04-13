@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { bulletHitsBox } from '../client/src/game/bulletCollision';
+import { bulletHitsBox, bulletHitPoint } from '../client/src/game/bulletCollision';
 
 const RADIUS = 0.07;
 
@@ -66,5 +66,40 @@ describe('bulletHitsBox', () => {
     const b = new THREE.Box3(v(4.5, -5, -0.5), v(5.5, 5, 0.5));
     // Bullet moves from x=0 to x=8 — passes completely through the 1-unit-wide beam
     expect(bulletHitsBox(v(0, 0, 0), v(8, 0, 0), b, RADIUS)).toBe(true);
+  });
+});
+
+describe('bulletHitPoint', () => {
+  it('returns null on a clean miss', () => {
+    const b = box(1.5, 1.5, 1.5, 0, 0, 6);
+    expect(bulletHitPoint(v(5, 0, 0), v(5, 0, 4), b, RADIUS)).toBeNull();
+  });
+
+  it('returns a point on the near face of the box (head-on)', () => {
+    // Box: x[-1.5,1.5] y[-1.5,1.5] z[4.5,7.5]  (centre at z=6)
+    const b = box(1.5, 1.5, 1.5, 0, 0, 6);
+    const hit = bulletHitPoint(v(0, 0, 0), v(0, 0, 8), b, RADIUS);
+    expect(hit).not.toBeNull();
+    // Hit should be near the near face (z ≈ 4.5 - RADIUS = 4.43)
+    expect(hit!.z).toBeCloseTo(4.5 - RADIUS, 1);
+  });
+
+  it('returns surface point when bullet skips through thin plate', () => {
+    // 1-unit plate at z[4.5,5.5]; bullet jumps from z=3 to z=6
+    const b = new THREE.Box3(v(-5, -5, 4.5), v(5, 5, 5.5));
+    const hit = bulletHitPoint(v(0, 0, 3), v(0, 0, 6), b, RADIUS);
+    expect(hit).not.toBeNull();
+    // Surface entry is at expanded near face: z ≈ 4.5 - RADIUS = 4.43
+    expect(hit!.z).toBeGreaterThan(3.0);
+    expect(hit!.z).toBeLessThan(5.5);
+  });
+
+  it('returns a point on the correct wall face for an X-axis hit', () => {
+    // Box: x[8,10] y[-5,5] z[-5,5]; bullet travels along +X
+    const b = new THREE.Box3(v(8, -5, -5), v(10, 5, 5));
+    const hit = bulletHitPoint(v(0, 0, 0), v(15, 0, 0), b, RADIUS);
+    expect(hit).not.toBeNull();
+    // Near face is x=8; hit should be just before it (x ≈ 8 - RADIUS)
+    expect(hit!.x).toBeCloseTo(8 - RADIUS, 1);
   });
 });

@@ -119,10 +119,12 @@ export class App {
     this.arena.update(dt);
 
     this.tickWeaponFire();
-    this.projectiles.update(dt, [
-      ...this.arena.getObstacleAABBs(),
-      ...this.arena.getPortalBarrierAABBs(),
-    ]);
+    this.projectiles.update(
+      dt,
+      this.arena.getObstacleAABBs(),
+      this.arena.getPortalBarrierAABBs(),
+      (hitPos) => this.arena.triggerPortalImpact(hitPos),
+    );
     this.tickGunTuning();
 
     if (FEATURE_FLAGS.thirdPersonLookBehind && this.input.consumeThirdPersonToggle()) {

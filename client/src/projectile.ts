@@ -14,6 +14,7 @@ export class Projectile {
   private vel: THREE.Vector3;
   private age  = 0;
   public  dead = false;
+  private teamColor: number;
 
   public constructor(
     private scene: THREE.Scene,
@@ -21,6 +22,7 @@ export class Projectile {
     direction: THREE.Vector3,
     teamColor: number,
   ) {
+    this.teamColor = teamColor;
     this.vel = direction.clone().normalize().multiplyScalar(BULLET_SPEED);
 
     // Core bullet mesh
@@ -84,6 +86,10 @@ export class Projectile {
   /** World position of the bullet this frame. */
   public getPosition(): THREE.Vector3 {
     return this.mesh.position;
+  }
+
+  public getTeamColor(): number {
+    return this.teamColor;
   }
 
   public dispose(): void {

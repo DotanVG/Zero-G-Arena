@@ -76,7 +76,6 @@ export class App {
 
   private beginNewRound(): void {
     this.hud.hideRoundEnd();
-    this.cam.resetZeroGFlip();
     this.projectiles.clear();
 
     const layout = generateArenaLayout();
@@ -85,8 +84,9 @@ export class App {
 
     const openAxis = this.arena.getBreachOpenAxis(this.player.team);
     const openSign = this.arena.getBreachOpenSign(this.player.team);
-    this.cam.setYaw(cameraYawFacingBreachOpening(openAxis, openSign));
-    this.cam.setPitch(0);
+    // resetForBreachSpawn seeds zeroGQuat so subsequent setZeroGMode(false)
+    // calls don't overwrite the correct yaw with stale zero-G orientation.
+    this.cam.resetForBreachSpawn(cameraYawFacingBreachOpening(openAxis, openSign));
 
     this.arena.setPortalDoorsOpen(false);
     this.round.startCountdown();
@@ -119,7 +119,7 @@ export class App {
     this.arena.update(dt);
 
     this.tickWeaponFire();
-    this.projectiles.update(dt);
+    this.projectiles.update(dt, this.arena.getObstacleAABBs());
     this.tickGunTuning();
 
     if (FEATURE_FLAGS.thirdPersonLookBehind && this.input.consumeThirdPersonToggle()) {

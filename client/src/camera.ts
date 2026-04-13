@@ -188,6 +188,28 @@ export class CameraController {
   public getYaw():   number { return this.yaw; }
   public getPitch(): number { return this.pitch; }
 
+  /**
+   * Hard-reset camera orientation for round start when the player spawns in
+   * their breach room. Must be called instead of the old resetZeroGFlip +
+   * setYaw + setPitch combo.
+   *
+   * Problem it solves: setYaw() sets gravity-mode yaw correctly, but the very
+   * next frame setZeroGMode(false) fires (because player.phase === 'BREACH')
+   * and re-extracts yaw from zeroGQuat — overwriting the value we just set.
+   * Seeding zeroGQuat here ensures that extraction gives the right answer.
+   */
+  public resetForBreachSpawn(yaw: number): void {
+    this.yaw   = yaw;
+    this.pitch = 0;
+    // Seed zeroGQuat to match so the yaw extraction in setZeroGMode(false) is
+    // correct if it fires on the first frame (i.e. player was previously floating).
+    this.zeroGQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    // Force gravity mode immediately — no transition needed at round start.
+    this.zeroGMode             = false;
+    this.returnTransitioning   = false;
+    this.returnTransitionProgress = 0;
+  }
+
   // ── Private helpers ───────────────────────────────────────────────
 
   private gravityQuaternion(): THREE.Quaternion {

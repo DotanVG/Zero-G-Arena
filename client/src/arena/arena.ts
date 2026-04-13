@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import {
   ARENA_SIZE,
   BREACH_ROOM_D,
+  BREACH_ROOM_W,
+  BREACH_ROOM_H,
 } from '../../../shared/constants';
 import { type PhysicsState } from '../physics';
 import { GoalPlane, type GoalDef } from './goal';
@@ -15,6 +17,7 @@ import { buildBreachWalls } from './breachWalls';
 import { placePortalArenaBars } from './portalBars';
 import { isDeepInBreachRoom, isInBreachRoom } from './breachRoomQueries';
 import { bounceAgainstBoxes } from './obstacleCollision';
+import { PortalEnergyWall } from './portalEnergyWall';
 
 interface BreachRoom {
   team: 0 | 1;
@@ -41,6 +44,7 @@ export class Arena {
   private goalPlanes: GoalPlane[] = [];
   private barObjects: BarObject[] = [];
   private breachRooms: BreachRoom[] = [];
+  private energyWalls: PortalEnergyWall[] = [];
   private currentLayout: GeneratedLayout | null = null;
 
   public constructor(private scene: THREE.Scene) {
@@ -105,6 +109,7 @@ export class Arena {
       buildBreachWalls(group, team, goalAxis, openSign);
 
       this.breachRooms.push({ team, center, openAxis: goalAxis, openSign, group });
+      this.energyWalls.push(new PortalEnergyWall(this.scene, goalAxis, sign, team));
     }
 
     placePortalArenaBars(this.scene, this.barObjects, goalAxis, goalSigns);
@@ -159,6 +164,49 @@ export class Arena {
     return this.obstaclesGroup.children.map(c => new THREE.Box3().setFromObject(c as THREE.Mesh));
   }
 
+  /**
+   * Thin world-space slabs at each breach room portal opening (BREACH_ROOM_W × BREACH_ROOM_H).
+   * Include these alongside obstacle AABBs in projectileSystem.update() so bullets are killed
+   * exactly at the portal face and trigger the hit-flash at the energy wall position.
+   */
+  public getPortalBarrierAABBs(): THREE.Box3[] {
+    return this.breachRooms.map((room) => {
+      const { openAxis, openSign } = room;
+      // The arena face (portal opening) is at sign * ARENA_SIZE/2 where sign = -openSign.
+      const sign = (-openSign) as 1 | -1;
+      const faceCoord = sign * (ARENA_SIZE / 2);
+      const SLAB = 0.15; // half-thickness of the barrier slab
+      const hw = BREACH_ROOM_W / 2;
+      const hh = BREACH_ROOM_H / 2;
+      const perpAxis: 'x' | 'z' = openAxis === 'x' ? 'z' : 'x';
+
+      const min = new THREE.Vector3();
+      const max = new THREE.Vector3();
+
+      // Y (height — always world-Y)
+      min.y = -hh;
+      max.y = hh;
+
+      // Perp axis (width — rooms are centered at perpAxis=0)
+      if (perpAxis === 'x') {
+        min.x = -hw;  max.x = hw;
+      } else {
+        min.z = -hw;  max.z = hw;
+      }
+
+      // Goal axis (thin slab at portal face)
+      if (openAxis === 'x') {
+        min.x = faceCoord - SLAB;  max.x = faceCoord + SLAB;
+      } else if (openAxis === 'y') {
+        min.y = faceCoord - SLAB;  max.y = faceCoord + SLAB;
+      } else {
+        min.z = faceCoord - SLAB;  max.z = faceCoord + SLAB;
+      }
+
+      return new THREE.Box3(min, max);
+    });
+  }
+
   public getGoalPlanes(): GoalPlane[] {
     return this.goalPlanes;
   }
@@ -177,6 +225,7 @@ export class Arena {
   public update(dt: number): void {
     for (const bar of this.barObjects) bar.update(dt);
     for (const goal of this.goalPlanes) goal.update(dt);
+    for (const wall of this.energyWalls) wall.update(dt);
   }
 
   private clearObstacles(): void {
@@ -205,6 +254,8 @@ export class Arena {
       }
     }
     this.breachRooms = [];
+    for (const wall of this.energyWalls) wall.dispose();
+    this.energyWalls = [];
   }
 
   public setState(_id: string): void {

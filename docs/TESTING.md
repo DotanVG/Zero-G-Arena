@@ -29,6 +29,7 @@ tests/                      ← test files live here
   arena-gen.test.ts         ← shared/arena-gen.ts
   breachRoomQueries.test.ts ← client/src/arena/breachRoomQueries.ts
   cameraYawFromBreach.test.ts ← client/src/game/cameraYawFromBreach.ts
+  bulletCollision.test.ts    ← client/src/game/bulletCollision.ts
 shared/**/*.test.ts         ← co-located tests for shared/ modules (also discovered)
 ```
 
@@ -137,6 +138,12 @@ will fail in Node — keep those out of tests.
 
 ---
 
+## Test requirement policy
+
+Every new feature that adds a pure (side-effect-free) function **must** include vitest
+tests before commit. Extract the math into a standalone function and test it. Visual/scene
+code is exempt (no WebGL in Node), but the logic it delegates to is not.
+
 ## Current test coverage
 
 | Test file | Function(s) covered | Tests |
@@ -145,4 +152,5 @@ will fail in Node — keep those out of tests.
 | `arena-gen.test.ts` | `generateArenaLayout` | 7 |
 | `breachRoomQueries.test.ts` | `isInBreachRoom`, `isDeepInBreachRoom` | 6 |
 | `cameraYawFromBreach.test.ts` | `cameraYawFacingBreachOpening` | 3 |
-| **Total** | | **17** |
+| `bulletCollision.test.ts` | `bulletHitsBox` (swept collision) | 7 |
+| **Total** | | **24** |

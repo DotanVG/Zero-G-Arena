@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Projectile } from '../projectile';
+import { bulletHitsBox } from './bulletCollision';
 
 const BULLET_RADIUS   = 0.07;  // must match projectile.ts
 const FLASH_DURATION  = 0.13;  // seconds — quick burst
@@ -18,6 +19,9 @@ interface HitFlash {
  *
  * Projectiles here are client-visual only — the server is authoritative for
  * hits. See `projectile.ts` for single-projectile behaviour.
+ *
+ * Collision uses a swept ray-box test (bulletHitsBox) so fast bullets cannot
+ * skip through thin obstacles (1-unit plates / beams) in a single frame.
  */
 export class ProjectileSystem {
   private projectiles: Projectile[] = [];
@@ -30,22 +34,26 @@ export class ProjectileSystem {
   }
 
   /**
-   * @param obstacleBoxes  World-space AABBs of every solid obstacle this frame.
-   *                       Bullets that intersect any box (within BULLET_RADIUS)
-   *                       are killed and produce a hit-flash light.
+   * Advance all projectiles and test collisions.
+   *
+   * @param allBoxes  World-space AABBs to test against — pass obstacle boxes
+   *                  AND portal barrier boxes (Arena.getPortalBarrierAABBs)
+   *                  so bullets are visually killed exactly at the energy wall.
    */
-  public update(dt: number, obstacleBoxes: THREE.Box3[]): void {
+  public update(dt: number, allBoxes: THREE.Box3[]): void {
     for (const p of this.projectiles) {
       if (p.dead) continue;
 
+      // Snapshot position BEFORE the bullet moves — needed for swept test.
+      const oldPos = p.getPosition().clone();
       p.update(dt);
 
-      // Obstacle hit test — runs only if the bullet survived its own update
-      // (i.e. didn't exit the arena boundary or expire).
+      // Swept + proximity obstacle hit test — runs only if the bullet survived
+      // its own update (i.e. didn't exit the arena boundary or expire).
       if (!p.dead) {
-        const pos = p.getPosition();
-        for (const box of obstacleBoxes) {
-          if (box.distanceToPoint(pos) <= BULLET_RADIUS) {
+        const newPos = p.getPosition();
+        for (const box of allBoxes) {
+          if (bulletHitsBox(oldPos, newPos, box, BULLET_RADIUS)) {
             p.dispose();
             break;
           }

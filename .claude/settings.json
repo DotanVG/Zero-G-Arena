@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "enabledPlugins": {
+    "vercel@claude-plugins-official": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit *)",
+            "shell": "powershell",
+            "command": "$script = Join-Path $env:CLAUDE_PROJECT_DIR '.claude/hooks/guard-git-operations.mjs'; node $script",
+            "timeout": 600
+          },
+          {
+            "type": "command",
+            "if": "Bash(git push *)",
+            "shell": "powershell",
+            "command": "$script = Join-Path $env:CLAUDE_PROJECT_DIR '.claude/hooks/guard-git-operations.mjs'; node $script",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$script = Join-Path $env:CLAUDE_PROJECT_DIR '.claude/hooks/post-edit-validate.mjs'; node $script",
+            "async": true,
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -123,7 +123,7 @@ export class App {
       dt,
       this.arena.getObstacleAABBs(),
       this.arena.getPortalBarrierAABBs(),
-      (hitPos) => this.arena.triggerPortalImpact(hitPos),
+      (hitPos, color) => this.arena.triggerPortalImpact(hitPos, color),
     );
     this.tickGunTuning();
 

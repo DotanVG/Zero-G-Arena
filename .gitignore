@@ -3,9 +3,12 @@ dist
 .env
 .vercel
 PlanTracker.md
-CLAUDE.md
+CLAUDE.local.md
 .impeccable.md
 *.log
+.claude/settings.local.json
+.claude/worktrees/
+.claude/scheduled_tasks.lock
 # Root-level dev tooling (concurrently) — not part of deployable code
 /package.json
 /package-lock.json

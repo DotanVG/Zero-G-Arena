@@ -133,8 +133,8 @@ export class PortalEnergyWall {
    * Spawn an expanding ring + radial sparkles at `worldPos`.
    * Call this whenever a projectile hits the portal barrier.
    */
-  public spawnImpact(worldPos: THREE.Vector3): void {
-    const col = this.color;
+  public spawnImpact(worldPos: THREE.Vector3, bulletColor: number): void {
+    const col = bulletColor;
 
     // ── Expanding ring (oriented to lie in the portal plane) ──────────
     const ringGeo = new THREE.RingGeometry(0.5, 1.0, 20);

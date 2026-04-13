@@ -51,7 +51,7 @@ export class ProjectileSystem {
     dt: number,
     solidBoxes: THREE.Box3[],
     portalBoxes: THREE.Box3[],
-    onPortalHit: (pos: THREE.Vector3) => void,
+    onPortalHit: (pos: THREE.Vector3, color: number) => void,
   ): void {
     for (const p of this.projectiles) {
       if (p.dead) continue;
@@ -83,7 +83,7 @@ export class ProjectileSystem {
             if (hit) {
               p.dispose();
               this.spawnFlash(hit, p.getTeamColor(), PORTAL_INTENSITY, PORTAL_DIST);
-              onPortalHit(hit);
+              onPortalHit(hit, p.getTeamColor());
               handledFlash = true;
               break;
             }

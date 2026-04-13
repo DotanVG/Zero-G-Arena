@@ -212,7 +212,7 @@ export class Arena {
    * an impact ring + sparkle effect on it. Call this from the game loop whenever
    * a projectile hits a portal barrier AABB.
    */
-  public triggerPortalImpact(worldPos: THREE.Vector3): void {
+  public triggerPortalImpact(worldPos: THREE.Vector3, bulletColor: number): void {
     let nearest: typeof this.energyWalls[0] | null = null;
     let bestDist = Infinity;
     for (let i = 0; i < this.breachRooms.length; i++) {
@@ -226,7 +226,7 @@ export class Arena {
           : Math.abs(worldPos.z - faceCoord);
       if (d < bestDist) { bestDist = d; nearest = this.energyWalls[i]; }
     }
-    nearest?.spawnImpact(worldPos);
+    nearest?.spawnImpact(worldPos, bulletColor);
   }
 
   public getGoalPlanes(): GoalPlane[] {

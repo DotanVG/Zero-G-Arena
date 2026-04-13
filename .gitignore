@@ -3,7 +3,6 @@ dist
 .env
 .vercel
 PlanTracker.md
-CLAUDE.md
 .impeccable.md
 *.log
 .claude/worktrees/

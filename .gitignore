@@ -5,6 +5,7 @@ dist
 PlanTracker.md
 .impeccable.md
 *.log
+.claude/settings.local.json
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 # Root-level dev tooling (concurrently) — not part of deployable code

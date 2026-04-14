@@ -14,6 +14,7 @@ import { RoundController } from './roundController';
 import { ProjectileSystem } from './projectileSystem';
 import { buildShotFromCamera } from './weaponFire';
 import { GunTuneOverlay } from './gunTuneOverlay';
+import { FloatArmTuneOverlay } from './floatArmTuneOverlay';
 import { cameraYawFacingBreachOpening } from './cameraYawFromBreach';
 
 /**
@@ -34,6 +35,7 @@ export class App {
   private projectiles: ProjectileSystem;
   private gun: GunViewModel;
   private gunTuneOverlay = new GunTuneOverlay();
+  private floatArmTuneOverlay = new FloatArmTuneOverlay();
 
   private lastTime = 0;
   private thirdPerson = false;
@@ -135,10 +137,7 @@ export class App {
     this.cam.apply(this.player.getPosition(), this.thirdPerson, isSelfie);
     this.updateGunVisibility(isSelfie);
     this.updateHud();
-    this.gunTuneOverlay.render(
-      this.player.getThirdPersonGunTuningState(),
-      FEATURE_FLAGS.thirdPersonGunTuning,
-    );
+    this.renderDebugTuningOverlay();
 
     this.sceneMgr.render();
     requestAnimationFrame((t) => this.loop(t));
@@ -157,22 +156,106 @@ export class App {
     const shot = buildShotFromCamera(this.player, this.cam, this.gun, useThirdPersonMuzzle);
     if (!shot) return;
     this.projectiles.spawn(shot.origin, shot.direction, shot.color);
+    this.player.triggerArmRecoil();
   }
 
   private tickGunTuning(): void {
-    if (!FEATURE_FLAGS.thirdPersonGunTuning) return;
+    const tuning = FEATURE_FLAGS.debugTuning;
+    if (!tuning.enabled) return;
 
-    if (this.input.consumeGunTuneToggle()) this.player.toggleThirdPersonGunTuning();
-    if (this.input.consumeGunTuneReset()) this.player.resetThirdPersonGunTuning();
-    if (this.input.consumeGunTunePrint()) this.player.logThirdPersonGunTuning();
+    if (tuning.target === 'Pistol') {
+      if (this.input.consumeGunTuneToggle()) this.player.toggleThirdPersonGunTuning();
+      if (this.input.consumeGunTuneReset()) this.player.resetThirdPersonGunTuning();
+      if (this.input.consumeGunTunePrint()) {
+        void this.copyDebugTuningToClipboard(this.player.logThirdPersonGunTuning());
+      }
 
-    if (this.player.isThirdPersonGunTuningEnabled()) {
+      if (this.player.isThirdPersonGunTuningEnabled()) {
+        const tuningAxes = this.input.getGunTuneAxes();
+        this.player.nudgeThirdPersonGun(
+          tuningAxes.position,
+          tuningAxes.rotation,
+          tuningAxes.fine,
+        );
+      }
+      return;
+    }
+
+    if (!this.player.isFloatLimbTarget(tuning.target)) return;
+
+    if (this.input.consumeGunTuneToggle()) this.player.toggleFloatArmTuning();
+    if (this.input.consumeGunTuneReset()) this.player.resetFloatLimbTuning(tuning.target);
+    if (this.input.consumeGunTunePrint()) {
+      void this.copyDebugTuningToClipboard(this.player.logFloatLimbTuning(tuning.target));
+    }
+
+    if (this.player.isFloatLimbTuningEnabled()) {
       const tuningAxes = this.input.getGunTuneAxes();
-      this.player.nudgeThirdPersonGun(
-        tuningAxes.position,
+      this.player.nudgeFloatLimbRotation(
+        tuning.target,
         tuningAxes.rotation,
         tuningAxes.fine,
       );
+    }
+  }
+
+  private renderDebugTuningOverlay(): void {
+    const tuning = FEATURE_FLAGS.debugTuning;
+
+    this.gunTuneOverlay.render(
+      this.player.getThirdPersonGunTuningState(),
+      tuning.enabled && tuning.target === 'Pistol',
+    );
+
+    if (!this.player.isFloatLimbTarget(tuning.target)) {
+      this.floatArmTuneOverlay.render(
+        { target: 'FloatRightArm', rotation: this.player.getFloatLimbTuningState('FloatRightArm').rotation },
+        false,
+        false,
+      );
+      return;
+    }
+
+    this.floatArmTuneOverlay.render(
+      this.player.getFloatLimbTuningState(tuning.target),
+      this.player.isFloatLimbTuningEnabled(),
+      tuning.enabled,
+    );
+  }
+
+  private async copyDebugTuningToClipboard(text: string): Promise<void> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        console.info('[DebugTuning] Copied tuning values to clipboard.');
+        return;
+      }
+    } catch (error) {
+      console.warn('[DebugTuning] Clipboard API failed, trying fallback copy.', error);
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    textarea.style.pointerEvents = 'none';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    try {
+      const copied = document.execCommand('copy');
+      if (copied) {
+        console.info('[DebugTuning] Copied tuning values to clipboard.');
+      } else {
+        console.warn('[DebugTuning] Clipboard copy failed; value is still in the console.');
+      }
+    } catch (error) {
+      console.warn('[DebugTuning] Clipboard fallback failed; value is still in the console.', error);
+    } finally {
+      document.body.removeChild(textarea);
     }
   }
 

@@ -24,6 +24,8 @@ import { classifyHitZone } from './playerCombat';
 import { breachRoomFloorY, computeBreachSpawnPosition } from './playerSpawn';
 import {
   ANIM_DEATH,
+  ANIM_FADE_SECONDS,
+  ANIM_FLOAT,
   ANIM_IDLE_HOLD,
   ANIM_JUMP,
   ANIM_RUN_HOLD,
@@ -36,9 +38,24 @@ import {
   applyBarHoldPose,
   measureLeftHandGripOffset,
 } from './playerGrabPose';
+import {
+  applyFloatArmTilt,
+  applyArmRecoil,
+  RECOIL_DURATION,
+  getDefaultRotation,
+  getFloatLimbRotation,
+  getFloatLimbTuningState,
+  resetFloatLimbRotation,
+  setFloatLimbRotation,
+  type DebugTuningTarget,
+  type FloatArmTuningState,
+  type FloatLimbTuningTarget,
+} from './playerAimPose';
 import { ThirdPersonGun, type ThirdPersonGunTuningState } from './playerThirdPersonGun';
 
 const GRAB_ROTATION_SMOOTHING = 0.0008;
+const FLOAT_ARM_TUNING_STEP = Math.PI / 180;
+const FLOAT_ARM_FINE_TUNING_STEP = Math.PI / 900;
 
 export class LocalPlayer {
   public phys: PhysicsState = {
@@ -76,6 +93,13 @@ export class LocalPlayer {
   private animation = new PlayerAnimationController();
   private gun = new ThirdPersonGun();
   private visualQuaternion = new THREE.Quaternion();
+  // Tracks the previous frame's animation name so we can detect transitions.
+  private lastKnownAnimation = ANIM_IDLE_HOLD;
+  // Counts down after leaving ANIM_JUMP to cover the crossfade window.
+  private armRestoreTimer = 0;
+  // Counts down from RECOIL_DURATION to 0 after each shot.
+  private recoilTimer = 0;
+  private floatLimbTuningEnabled = false;
 
   public constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Group();
@@ -145,6 +169,11 @@ export class LocalPlayer {
     return !this.damage.frozen && !this.damage.rightArm;
   }
 
+  /** Call from gameApp immediately after a shot fires to start the recoil animation. */
+  public triggerArmRecoil(): void {
+    this.recoilTimer = RECOIL_DURATION;
+  }
+
   public maxLaunchPower(): number {
     return this.damage.legs
       ? MAX_LAUNCH_SPEED * LEGS_HIT_LAUNCH_FACTOR
@@ -177,7 +206,7 @@ export class LocalPlayer {
         this.updateRespawning(arena, dt);
         break;
     }
-    this.updateAnimation(input, dt);
+    this.updateAnimation(input, cam, dt);
     const visualQuat = this.computeVisualQuaternion(cam, dt);
     if (this.phase === 'GRABBING' || this.phase === 'AIMING') {
       this.lockGripToBar(visualQuat);
@@ -363,27 +392,54 @@ export class LocalPlayer {
     this.phase = 'FLOATING';
   }
 
-  private updateAnimation(input: InputManager, dt: number): void {
+  private updateAnimation(input: InputManager, cam: CameraController, dt: number): void {
     if (this.phase === 'GRABBING' || this.phase === 'AIMING') {
       this.animation.resetBreathing();
       if (!this.grabPoseLocked) {
         this.lockGrabPose();
       }
+      // Clear transient timers so stale state doesn't bleed into post-grab transitions.
+      this.armRestoreTimer = 0;
+      this.lastKnownAnimation = ANIM_IDLE_HOLD;
       return;
     }
 
     this.grabPoseLocked = false;
+    const prevAnimation = this.lastKnownAnimation;
     const nextAnimation = this.selectAnimation(input);
+
     this.animation.setTargetAnimation(nextAnimation);
 
-    const animationDt = this.animation.getCurrentAnimation() === ANIM_JUMP
+    const animationDt = nextAnimation === ANIM_JUMP
       ? dt * BREACH_JUMP_TAKEOFF_SPEED
       : dt;
     this.animation.tickMixers(animationDt);
 
-    if (this.animation.getCurrentAnimation() === ANIM_JUMP) {
+    // After leaving the jump clip, keep restoring for one crossfade window so
+    // the jump clip's last-frame arm pose doesn't bleed through.
+    if (prevAnimation === ANIM_JUMP && nextAnimation !== ANIM_JUMP) {
+      this.armRestoreTimer = ANIM_FADE_SECONDS;
+    }
+    this.armRestoreTimer = Math.max(0, this.armRestoreTimer - dt);
+
+    if (nextAnimation === ANIM_FLOAT) {
+      this.animation.restoreFloatRightArmPose();
+    } else if (nextAnimation === ANIM_JUMP || this.armRestoreTimer > 0) {
       this.animation.restoreJumpRightArmPose();
     }
+
+    // Float: tilt the pistol arm upward after locking it to the base pose.
+    if (nextAnimation === ANIM_FLOAT) {
+      applyFloatArmTilt(this.animation.getRigs());
+    }
+
+    // Recoil: brief upward kick on every shot, applied on top of everything else.
+    this.recoilTimer = Math.max(0, this.recoilTimer - dt);
+    if (this.recoilTimer > 0) {
+      applyArmRecoil(this.animation.getRigs(), this.recoilTimer / RECOIL_DURATION);
+    }
+
+    this.lastKnownAnimation = nextAnimation;
 
     if (this.isBreachIdle(input)) {
       this.animation.tickBreathing(dt);
@@ -394,6 +450,7 @@ export class LocalPlayer {
 
   private selectAnimation(input: InputManager): string {
     if (this.phase === 'FROZEN') return ANIM_DEATH;
+    if (this.phase === 'FLOATING') return ANIM_FLOAT;
     if (this.phase === 'RESPAWNING') return ANIM_STANDING;
     if (this.phase === 'GRABBING' || this.phase === 'AIMING') return ANIM_STANDING;
 
@@ -422,6 +479,7 @@ export class LocalPlayer {
 
   private computeVisualQuaternion(cam: CameraController, dt: number): THREE.Quaternion {
     const cameraQuat = cam.getQuaternion();
+
     if (this.phase !== 'GRABBING' && this.phase !== 'AIMING') {
       this.visualQuaternion.copy(cameraQuat);
       return this.visualQuaternion;
@@ -552,12 +610,68 @@ export class LocalPlayer {
     this.gun.resetTuning();
   }
 
-  public logThirdPersonGunTuning(): void {
-    this.gun.logTuning();
+  public logThirdPersonGunTuning(): string {
+    return this.gun.logTuning();
   }
 
   public getThirdPersonGunTuningState(): ThirdPersonGunTuningState {
     return this.gun.getTuningState();
+  }
+
+  public toggleFloatArmTuning(): boolean {
+    this.floatLimbTuningEnabled = !this.floatLimbTuningEnabled;
+    console.info(
+      `[FloatLimbTuning] tuning ${this.floatLimbTuningEnabled ? 'enabled' : 'disabled'}.`,
+    );
+    return this.floatLimbTuningEnabled;
+  }
+
+  public isFloatLimbTuningEnabled(): boolean {
+    return this.floatLimbTuningEnabled;
+  }
+
+  public nudgeFloatLimbRotation(
+    target: FloatLimbTuningTarget,
+    rotationAxes: { x: number; y: number; z: number },
+    fine: boolean,
+  ): boolean {
+    const hasRot = rotationAxes.x !== 0 || rotationAxes.y !== 0 || rotationAxes.z !== 0;
+    if (!hasRot) return false;
+
+    const step = fine ? FLOAT_ARM_FINE_TUNING_STEP : FLOAT_ARM_TUNING_STEP;
+    const rotation = getFloatLimbRotation(target);
+    rotation.x += rotationAxes.x * step;
+    rotation.y += rotationAxes.y * step;
+    rotation.z += rotationAxes.z * step;
+    setFloatLimbRotation(target, rotation);
+    return true;
+  }
+
+  public resetFloatLimbTuning(target: FloatLimbTuningTarget): void {
+    resetFloatLimbRotation(target);
+    console.info(`[${target}] rotation reset to default.`);
+    this.logFloatLimbTuning(target);
+  }
+
+  public logFloatLimbTuning(target: FloatLimbTuningTarget): string {
+    const rotation = getFloatLimbRotation(target);
+    const degX = (rotation.x * 180) / Math.PI;
+    const degY = (rotation.y * 180) / Math.PI;
+    const degZ = (rotation.z * 180) / Math.PI;
+    const defaults = getDefaultRotation(target);
+    const line = `[${target}] ROTATION = new THREE.Euler(${rotation.x.toFixed(4)}, ${rotation.y.toFixed(4)}, ${rotation.z.toFixed(4)}); degrees (${degX.toFixed(1)}, ${degY.toFixed(1)}, ${degZ.toFixed(1)}); default (${defaults.x.toFixed(4)}, ${defaults.y.toFixed(4)}, ${defaults.z.toFixed(4)}).`;
+    console.info(line);
+    return line;
+  }
+
+  public getFloatLimbTuningState(target: FloatLimbTuningTarget): FloatArmTuningState {
+    return getFloatLimbTuningState(target);
+  }
+
+  public isFloatLimbTarget(target: DebugTuningTarget): target is FloatLimbTuningTarget {
+    return target === 'FloatRightArm'
+      || target === 'FloatRightPalm'
+      || target === 'LeftArmHanging';
   }
 
   public getScore(): number {

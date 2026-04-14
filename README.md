@@ -19,6 +19,8 @@ Be the first player to float through the enemy's **breach portal** into their gr
 | `Space` | Jump (breach room) / Hold to charge launch (while grabbing a bar) |
 | `E` | Grab nearest bar |
 | `LMB` | Fire freeze pistol |
+| `V` | Toggle third-person view |
+| `B` | Hold selfie view |
 | `Mouse` | Look — gravity FPS in breach room, free zero-G in arena |
 | `Tab` | Show scoreboard |
 | `Esc` | Release mouse |

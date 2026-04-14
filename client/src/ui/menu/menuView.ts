@@ -193,6 +193,8 @@ export function createMenuView(savedName: string): MenuElements {
         <span class="menu-key">E</span> Grab bar &nbsp;&middot;&nbsp;
         <span class="menu-key">SPACE</span> Charge launch<br>
         <span class="menu-key">LMB</span> Freeze shot &nbsp;&middot;&nbsp;
+        <span class="menu-key">V</span> Third-person view &nbsp;&middot;&nbsp;
+        <span class="menu-key">B</span> Selfie view<br>
         <span class="menu-key">MOUSE</span> Look &nbsp;&middot;&nbsp;
         <span class="menu-key">ESC</span> Release cursor
       </div>

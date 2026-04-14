@@ -124,13 +124,13 @@ export class ThirdPersonGun {
     this.logTuning();
   }
 
-  public logTuning(): void {
-    console.info(
+  public logTuning(): string {
+    const lines = [
       `[ThirdPersonGun] OFFSET = new THREE.Vector3(${this.offset.x.toFixed(3)}, ${this.offset.y.toFixed(3)}, ${this.offset.z.toFixed(3)});`,
-    );
-    console.info(
       `[ThirdPersonGun] ROTATION = new THREE.Euler(${this.rotation.x.toFixed(3)}, ${this.rotation.y.toFixed(3)}, ${this.rotation.z.toFixed(3)});`,
-    );
+    ];
+    for (const line of lines) console.info(line);
+    return lines.join('\n');
   }
 
   public getTuningState(): ThirdPersonGunTuningState {

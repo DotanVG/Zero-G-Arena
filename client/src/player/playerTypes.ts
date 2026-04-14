@@ -33,4 +33,5 @@ export interface AnimatedRig {
   bones: Partial<Record<PoseBoneName, THREE.Bone>>;
   breathingBasePositions: Partial<Record<BreathingBoneName, THREE.Vector3>>;
   frozenJumpRightArmPose: Partial<Record<RightArmPoseBoneName, THREE.Quaternion>>;
+  floatReferenceRightArmPose: Partial<Record<RightArmPoseBoneName, THREE.Quaternion>>;
 }

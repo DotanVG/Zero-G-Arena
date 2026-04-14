@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { AnimatedRig } from './playerTypes';
+import { getFloatLimbRotation } from './playerAimPose';
 
 /**
  * Bar-hold bone offsets. Applied on top of the base Alien_Standing pose so
@@ -29,6 +30,7 @@ const LEFT_HAND_GRIP_FINGER_ADVANCE = 0.01;
 export const DEFAULT_LEFT_HAND_GRIP_LOCAL = new THREE.Vector3(-0.27, -0.322, 0.287);
 
 export function applyBarHoldPose(rigs: AnimatedRig[]): void {
+  const leftArmHangingOffset = getFloatLimbRotation('LeftArmHanging');
   for (const rig of rigs) {
     applyPoseOffset(rig.bones.Hips, BAR_HOLD_HIPS_OFFSET);
     applyPoseOffset(rig.bones.Abdomen, BAR_HOLD_ABDOMEN_OFFSET);
@@ -36,6 +38,7 @@ export function applyBarHoldPose(rigs: AnimatedRig[]): void {
     applyPoseOffset(rig.bones.Neck, BAR_HOLD_NECK_OFFSET);
     applyPoseOffset(rig.bones.ShoulderL, BAR_HOLD_SHOULDER_OFFSET);
     applyPoseOffset(rig.bones.UpperArmL, BAR_HOLD_UPPER_ARM_OFFSET);
+    applyPoseOffset(rig.bones.UpperArmL, leftArmHangingOffset);
     applyPoseOffset(rig.bones.LowerArmL, BAR_HOLD_LOWER_ARM_OFFSET);
     applyPoseOffset(rig.bones.PalmL, BAR_HOLD_PALM_OFFSET);
     applyPoseOffset(rig.bones.UpperLegL, BAR_HOLD_UPPER_LEG_LEFT_OFFSET);

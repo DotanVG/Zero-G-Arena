@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import type { AnimatedRig, PoseBoneName, BreathingBoneName, RightArmPoseBoneName } from './playerTypes';
 
 export const ANIM_IDLE_HOLD = 'Alien_IdleHold';
+export const ANIM_FLOAT = 'Alien_Swimming';
 export const ANIM_JUMP = 'Alien_Jump';
 export const ANIM_RUN_HOLD = 'Alien_RunHold';
 export const ANIM_STANDING = 'Alien_Standing';
 export const ANIM_DEATH = 'Alien_Death';
 export const ANIM_FADE_SECONDS = 0.16;
-export const BREACH_JUMP_TAKEOFF_SPEED = 2.35;
+export const BREACH_JUMP_TAKEOFF_SPEED = 0.78; // was 2.35 — 3× slower per design request
 
 const BREACH_BREATH_SPEED = 1.8;
 const BREACH_BREATH_ABDOMEN_Y = 0.012;
@@ -70,13 +71,27 @@ export class PlayerAnimationController {
       bones: collectPoseBones(root),
       breathingBasePositions: captureBreathingBasePositions(root),
       frozenJumpRightArmPose: {},
+      floatReferenceRightArmPose: {},
     };
     this.rigs.push(rig);
 
-    const action = actions.get(this.currentAnimation) ?? actions.get(ANIM_IDLE_HOLD);
+    const idleHoldAction = actions.get(ANIM_IDLE_HOLD);
+    if (idleHoldAction) {
+      // Apply frame-0 of the canonical idle-hold pose so we can snapshot
+      // a stable right-arm reference for floating, independent of the pose
+      // we happen to be transitioning from (e.g. bar-hang launch).
+      idleHoldAction.reset();
+      idleHoldAction.play();
+      rig.mixer.update(0);
+      rig.floatReferenceRightArmPose = captureRightArmPose(rig.bones);
+      idleHoldAction.stop();
+    }
+
+    const action = actions.get(this.currentAnimation) ?? idleHoldAction;
     if (action) {
       action.reset();
       action.play();
+      rig.mixer.update(0);
     }
 
     return rig;
@@ -162,21 +177,26 @@ export class PlayerAnimationController {
    * jump clip, which only animates the legs/torso.
    */
   public captureJumpRightArmPose(): void {
-    const bones: RightArmPoseBoneName[] = ['ShoulderR', 'UpperArmR', 'LowerArmR', 'PalmR'];
     for (const rig of this.rigs) {
-      const pose: AnimatedRig['frozenJumpRightArmPose'] = {};
-      for (const bone of bones) {
-        pose[bone] = rig.bones[bone]?.quaternion.clone();
-      }
-      rig.frozenJumpRightArmPose = pose;
+      rig.frozenJumpRightArmPose = captureRightArmPose(rig.bones);
     }
   }
 
   public restoreJumpRightArmPose(): void {
+    this.restoreRightArmPose('frozenJumpRightArmPose');
+  }
+
+  public restoreFloatRightArmPose(): void {
+    this.restoreRightArmPose('floatReferenceRightArmPose');
+  }
+
+  private restoreRightArmPose(
+    key: 'frozenJumpRightArmPose' | 'floatReferenceRightArmPose',
+  ): void {
     const bones: RightArmPoseBoneName[] = ['ShoulderR', 'UpperArmR', 'LowerArmR', 'PalmR'];
     for (const rig of this.rigs) {
       for (const bone of bones) {
-        const quat = rig.frozenJumpRightArmPose[bone];
+        const quat = rig[key][bone];
         const target = rig.bones[bone];
         if (quat && target) target.quaternion.copy(quat);
       }
@@ -219,4 +239,15 @@ function captureBreathingBasePositions(
     if (node instanceof THREE.Bone) positions[name] = node.position.clone();
   }
   return positions;
+}
+
+function captureRightArmPose(
+  bones: Partial<Record<PoseBoneName, THREE.Bone>>,
+): Partial<Record<RightArmPoseBoneName, THREE.Quaternion>> {
+  const pose: Partial<Record<RightArmPoseBoneName, THREE.Quaternion>> = {};
+  const names: RightArmPoseBoneName[] = ['ShoulderR', 'UpperArmR', 'LowerArmR', 'PalmR'];
+  for (const bone of names) {
+    pose[bone] = bones[bone]?.quaternion.clone();
+  }
+  return pose;
 }

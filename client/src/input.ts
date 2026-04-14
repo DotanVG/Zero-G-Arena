@@ -8,7 +8,7 @@ export class InputManager {
   private aimingActive  = false;
   private fireCooldown  = 0;
   private grabPressed   = false;     // one-shot: true only on the frame E is first pressed
-  private hPressed      = false;     // one-shot: for third-person toggle
+  private thirdPersonTogglePressed = false; // one-shot: for third-person toggle (V key)
   private gunTuneTogglePressed = false;
   private gunTuneResetPressed = false;
   private gunTunePrintPressed = false;
@@ -19,7 +19,7 @@ export class InputManager {
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
       if (e.code === 'KeyE' && !e.repeat) this.grabPressed = true;
-      if (e.code === 'KeyH' && !e.repeat) this.hPressed = true;
+      if (e.code === 'KeyV' && !e.repeat) this.thirdPersonTogglePressed = true;
       if (e.code === 'KeyP' && !e.repeat) this.gunTuneTogglePressed = true;
       if (e.code === 'Backspace' && !e.repeat) this.gunTuneResetPressed = true;
       if (e.code === 'Enter' && !e.repeat) this.gunTunePrintPressed = true;
@@ -126,10 +126,10 @@ export class InputManager {
   /** @deprecated use consumeGrab() */
   public isGrab(): boolean { return this.keys.has('KeyE'); }
 
-  /** Toggle Third Person — KeyH. Returns true only on the first frame H is pressed. */
+  /** Toggle Third Person — KeyV. Returns true only on the first frame V is pressed. */
   public consumeThirdPersonToggle(): boolean {
-    const v = this.hPressed;
-    this.hPressed = false;
+    const v = this.thirdPersonTogglePressed;
+    this.thirdPersonTogglePressed = false;
     return v;
   }
 
@@ -214,7 +214,7 @@ export class InputManager {
     this.mouseDy = 0;
     this.aimDy = 0;
     this.grabPressed = false;
-    this.hPressed = false;
+    this.thirdPersonTogglePressed = false;
     this.gunTuneTogglePressed = false;
     this.gunTuneResetPressed = false;
     this.gunTunePrintPressed = false;

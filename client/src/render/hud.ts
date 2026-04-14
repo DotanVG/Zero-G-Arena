@@ -66,6 +66,7 @@ export class HUD {
     this.renderGrabPrompt(state.playerPhase, state.nearBar, state.damage);
     this.renderPowerBar(state.playerPhase, state.launchPower, state.maxLaunchPower);
     this.renderDamage(state.damage);
+    this.renderBodyStatus(state.damage, state.team);
     this.renderScoreboard(state.tabHeld, state.ownTeam, state.enemyTeam);
   }
 
@@ -180,6 +181,43 @@ export class HUD {
     if (damage.rightArm) parts.push('🦾 RIGHT ARM — NO FIRE');
     if (damage.legs) parts.push('🦵 LEGS — REDUCED POWER');
     this.view.damage.innerHTML = parts.join('<br>');
+  }
+
+  /**
+   * Updates the alien body-status silhouette on the left HUD panel.
+   *
+   * Fill colour = the ENEMY team colour (what's freezing you):
+   *   cyan team (0)     → frozen parts fill magenta
+   *   magenta team (1)  → frozen parts fill cyan
+   *
+   * Zone logic:
+   *   frozen = true  → head + body fully frozen (whole silhouette filled)
+   *   rightArm       → right-arm zone filled + red outline
+   *   leftArm        → left-arm zone filled + red outline
+   *   legs           → legs zone filled + red outline
+   */
+  private renderBodyStatus(damage: DamageState, team: 0 | 1): void {
+    const enemyFill  = team === 0 ? 'rgba(255,0,255,0.62)' : 'rgba(0,255,255,0.62)';
+    const hitStroke  = '#ff2200';
+    const dimStroke  = 'rgba(255,255,255,0.28)';
+    const hitWidth   = '2';
+    const dimWidth   = '1.5';
+
+    const applyZone = (
+      el: SVGPathElement,
+      active: boolean,
+      outlined = active,
+    ): void => {
+      el.setAttribute('fill',         active   ? enemyFill  : 'none');
+      el.setAttribute('stroke',       outlined ? hitStroke  : dimStroke);
+      el.setAttribute('stroke-width', outlined ? hitWidth   : dimWidth);
+    };
+
+    applyZone(this.view.bzHead,     damage.frozen);
+    applyZone(this.view.bzBody,     damage.frozen);
+    applyZone(this.view.bzLeftArm,  damage.leftArm);
+    applyZone(this.view.bzRightArm, damage.rightArm);
+    applyZone(this.view.bzLegs,     damage.legs);
   }
 
   private renderScoreboard(

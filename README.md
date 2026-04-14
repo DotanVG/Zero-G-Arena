@@ -2,7 +2,7 @@
 
 > **Vibe Game Jam 2026 Entry** · Zero-G Arena Shooter · Up to 20v20
 
-A fast-paced multiplayer first-person shooter where teams compete to breach each other's gravity chamber in a zero-gravity arena. Grab bars to launch yourself at high velocity, coordinate with teammates to freeze enemies with your pistol, and breach the enemy portal to score.
+A fast-paced multiplayer first-person shooter where teams compete to breach each other's gravity chamber in a zero-gravity arena. Grab bars to launch yourself at high velocity, coordinate with teammates to freeze enemies and secure victory.
 
 ---
 
@@ -68,29 +68,116 @@ cd server && npm run build    # outputs to server/dist/
 
 ---
 
-## Architecture
+## Project Structure
 
 ```
-Zero-G-Arena/
-├── client/          # Vite + Three.js browser app (TypeScript)
+Orbital-Breach/
+├── .claude/                         # AI context files
+├── .gitignore
+├── .impeccable.md
+├── .worktreeinclude
+├── CLAUDE.md                        # Development notes
+├── README.md                        # This file
+├── tsconfig.test.json               # Test TypeScript config
+├── vercel.json                      # Vercel deployment config
+├── vitest.config.ts                 # Test runner config
+│
+├── client/                          # Vite + Three.js browser app (TypeScript)
+│   ├── index.html
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── tsconfig.json
+│   ├── vite.config.ts
+│   ├── public/
+│   │   └── models/                  # 3D assets (GLB format)
+│   │       ├── Alien.glb
+│   │       ├── Alien_Helmet.glb
+│   │       └── Ray Gun.glb
 │   └── src/
-│       ├── app.ts         # Game orchestrator — loop, phases, subsystems
-│       ├── player.ts      # LocalPlayer — 6-phase state machine
-│       ├── camera.ts      # Dual-mode camera (gravity ↔ zero-G)
-│       ├── input.ts       # Keyboard/mouse, fire cooldown, pointer lock
-│       ├── arena/         # Arena geometry, obstacles, bars, portal doors
-│       ├── render/        # SceneManager, HUD, materials
-│       ├── net/           # NetClient (WebSocket stub → real in progress)
-│       └── ui/            # Screens (menu, lobby, pause — in progress)
-├── server/          # Node.js WebSocket server
+│       ├── main.ts                  # Entry point
+│       ├── app.ts                   # Game orchestrator
+│       ├── camera.ts                # Dual-mode camera (gravity ↔ zero-G)
+│       ├── combat.ts                # Combat stub
+│       ├── config.ts                # Configuration
+│       ├── featureFlags.ts           # Feature toggles
+│       ├── input.ts                 # Keyboard/mouse input handling
+│       ├── physics.ts               # Physics calculations
+│       ├── player.ts                # Player state machine stub
+│       ├── projectile.ts            # Projectile logic
+│       ├── arena/                   # Arena geometry & mechanics
+│       │   ├── arena.ts             # Main arena manager
+│       │   ├── bar.ts               # Grab bar implementation
+│       │   ├── breachRoomQueries.ts # Breach room intersection tests
+│       │   ├── breachWalls.ts       # Breach room wall geometry
+│       │   ├── goal.ts              # Breach portal mechanics
+│       │   ├── obstacleCollision.ts # Obstacle collision detection
+│       │   ├── portalBars.ts        # Portal bar objects
+│       │   ├── portalEnergyWall.ts  # Portal energy barrier visual
+│       │   └── states.ts            # Arena state enum
+│       ├── game/                    # Game loop & systems
+│       │   ├── gameApp.ts           # Main game app controller
+│       │   ├── bulletCollision.ts   # Bullet-player collision
+│       │   ├── cameraYawFromBreach.ts # Camera orientation helper
+│       │   ├── gunTuneOverlay.ts    # Debug gun tuning UI
+│       │   ├── projectileSystem.ts  # Projectile spawn/update system
+│       │   ├── roundController.ts   # Round state management
+│       │   └── weaponFire.ts        # Weapon firing logic
+│       ├── net/                     # Networking (WebSocket)
+│       │   ├── client.ts            # Network client
+│       │   ├── messages.ts          # Message type stubs
+│       │   └── reconciliation.ts    # Server reconciliation stub
+│       ├── player/                  # Player mechanics
+│       │   ├── localPlayer.ts       # LocalPlayer state machine
+│       │   ├── playerAnimationController.ts # Animation handling
+│       │   ├── playerCombat.ts      # Player combat state
+│       │   ├── playerGrabPose.ts    # Grab pose animation
+│       │   ├── playerSpawn.ts       # Spawn logic
+│       │   ├── playerThirdPersonGun.ts # Gun visual in third person
+│       │   └── playerTypes.ts       # TypeScript interfaces
+│       ├── render/                  # Rendering & UI
+│       │   ├── gun.ts               # Gun visual model
+│       │   ├── hud.ts               # HUD manager
+│       │   ├── materials.ts         # Three.js materials
+│       │   ├── scene.ts             # Scene setup
+│       │   └── hud/                 # HUD components
+│       │       ├── hudView.ts       # Main HUD display
+│       │       └── scoreboard.ts    # Scoreboard display
+│       ├── ui/                      # UI screens
+│       │   ├── menu.ts              # Menu controller
+│       │   └── menu/
+│       │       └── menuView.ts      # Menu UI view
+│       └── util/                    # Utilities
+│           ├── math.ts              # Math helpers
+│           └── pool.ts              # Object pool utility
+│
+├── server/                          # Node.js WebSocket server
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── tsconfig.json
 │   └── src/
-│       ├── index.ts   # WS server entry
-│       ├── room.ts    # Match lifecycle (lobby → countdown → playing → round-end)
-│       └── sim.ts     # Authoritative physics sim
-└── shared/          # Pure TypeScript — imported by both client and server
-    ├── schema.ts       # All network message types
-    ├── constants.ts    # Game tuning (FIRE_RATE, GRAB_RADIUS, ARENA_SIZE…)
-    └── arena-gen.ts    # Procedural arena layout (Mulberry32 RNG)
+│       ├── index.ts                 # Server entry point
+│       ├── player.ts                # Server-side player state
+│       ├── room.ts                  # Match lifecycle management
+│       ├── sim.ts                   # Authoritative physics simulator
+│       └── net/
+│           ├── messageCodec.ts      # Message encoding/decoding
+│           └── wsServer.ts          # WebSocket server setup
+│
+├── shared/                          # Pure TypeScript (client & server)
+│   ├── schema.ts                    # Network message types
+│   ├── constants.ts                 # Game tuning parameters
+│   └── arena-gen.ts                 # Procedural arena generation
+│
+├── docs/                            # Documentation
+│   ├── ARCHITECTURE.md              # Detailed architecture notes
+│   └── TESTING.md                   # Testing guide
+│
+└── tests/                           # Unit & integration tests
+    ├── arena-gen.test.ts            # Arena generation tests
+    ├── breachRoomQueries.test.ts    # Breach room query tests
+    ├── bulletCollision.test.ts      # Bullet collision tests
+    ├── cameraYawFromBreach.test.ts  # Camera orientation tests
+    └── smoke.test.ts                # Smoke test
 ```
 
 ### Networking Model

@@ -173,7 +173,8 @@ export class ThirdPersonGun {
   }
 
   private findMuzzleNode(root: THREE.Object3D): THREE.Object3D | null {
-    return root.getObjectByName('Muzzle.005')
+    return root.getObjectByName('Muzzle005')
+      ?? root.getObjectByName('Muzzle.005')
       ?? root.getObjectByName('Muzzle')
       ?? root.getObjectByName('muzzle')
       ?? root.children.find((child) => child.name.toLowerCase().includes('muzzle'))

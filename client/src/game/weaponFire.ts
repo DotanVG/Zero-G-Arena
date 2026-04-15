@@ -24,8 +24,11 @@ export function buildShotFromCamera(
   gun: GunViewModel,
   useThirdPersonMuzzle: boolean,
 ): FireShot | null {
-  const target = player.getPosition().clone().addScaledVector(cam.getForward(), 60.0);
-  const fallbackOrigin = player.getPosition()
+  // Aim target and fallback origin are both derived from the eye position so
+  // the shot direction matches what the player sees through the crosshair.
+  const eyePos = player.getEyePosition();
+  const target = eyePos.clone().addScaledVector(cam.getForward(), 60.0);
+  const fallbackOrigin = eyePos
     .clone()
     .add(new THREE.Vector3(0.2, -0.22, -0.6).applyQuaternion(cam.getQuaternion()));
   const firstPersonOrigin = gun.getMuzzleWorldPosition();

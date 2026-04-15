@@ -57,6 +57,13 @@ const GRAB_ROTATION_SMOOTHING = 0.0008;
 const FLOAT_ARM_TUNING_STEP = Math.PI / 180;
 const FLOAT_ARM_FINE_TUNING_STEP = Math.PI / 900;
 
+/**
+ * Head/eye bone position relative to the player-root mesh (mesh-local space),
+ * measured on the loaded Alien.glb after its scale/position/rotation offsets.
+ * Used to place the first-person camera at eye level rather than the physics root.
+ */
+const EYE_OFFSET = new THREE.Vector3(0, -0.27, 0.31);
+
 export class LocalPlayer {
   public phys: PhysicsState = {
     pos: new THREE.Vector3(0, 0, -15),
@@ -576,6 +583,18 @@ export class LocalPlayer {
 
   public getPosition(): THREE.Vector3 {
     return this.phys.pos;
+  }
+
+  /**
+   * World-space eye/head position — the correct origin for the first-person camera.
+   * Rotates EYE_OFFSET by visualQuaternion (the quaternion already applied to the
+   * mesh), so it tracks correctly in both zero-G (mesh follows camera fully) and
+   * breach-gravity mode (mesh is upright, head is always at the same body-local spot).
+   */
+  public getEyePosition(): THREE.Vector3 {
+    return this.phys.pos.clone().add(
+      EYE_OFFSET.clone().applyQuaternion(this.visualQuaternion),
+    );
   }
 
   public getMesh(): THREE.Group {

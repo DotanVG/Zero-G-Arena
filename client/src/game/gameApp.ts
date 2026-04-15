@@ -134,7 +134,7 @@ export class App {
     }
     const isSelfie = FEATURE_FLAGS.thirdPersonLookBehind && this.input.isSelfieHeld();
 
-    this.cam.apply(this.player.getPosition(), this.thirdPerson, isSelfie);
+    this.cam.apply(this.player.getEyePosition(), this.player.getPosition(), this.thirdPerson, isSelfie);
     this.updateGunVisibility(isSelfie);
     this.updateHud(dt);
     this.renderDebugTuningOverlay();

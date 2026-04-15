@@ -153,13 +153,25 @@ export class CameraController {
 
   // ── Application ───────────────────────────────────────────────────
 
-  public apply(position: THREE.Vector3, isThirdPerson: boolean = false, isSelfie: boolean = false): void {
+  /**
+   * Position and orient the camera for this frame.
+   *
+   * @param eyePosition  World-space eye/head position — used for first-person placement.
+   * @param bodyPosition World-space physics/body root — used for third-person and selfie
+   *                     orbits so the camera circles the body centre, not the head.
+   */
+  public apply(
+    eyePosition: THREE.Vector3,
+    bodyPosition: THREE.Vector3,
+    isThirdPerson: boolean = false,
+    isSelfie: boolean = false,
+  ): void {
     const quat = this.getQuaternion();
 
     if (isSelfie) {
-      // Selfie mode: look backwards at character
+      // Selfie mode: look backwards at character from in front of the body
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
-      const camPos = position.clone().add(forward.multiplyScalar(3.0));
+      const camPos = bodyPosition.clone().add(forward.multiplyScalar(3.0));
       this.camera.position.copy(camPos);
 
       // Rotate camera to look exactly opposite
@@ -167,16 +179,16 @@ export class CameraController {
       this.camera.quaternion.copy(quat).multiply(lookBackQuat);
 
     } else if (isThirdPerson) {
-      // Third person: camera is behind and slightly up
+      // Third person: orbit behind and slightly above the body root
       const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat);
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quat);
-      const camPos = position.clone().add(backward.multiplyScalar(3.0)).add(up.multiplyScalar(0.5));
+      const camPos = bodyPosition.clone().add(backward.multiplyScalar(3.0)).add(up.multiplyScalar(0.5));
       this.camera.position.copy(camPos);
       this.camera.quaternion.copy(quat);
 
     } else {
-      // First person
-      this.camera.position.copy(position);
+      // First person: place camera at the eye/head position
+      this.camera.position.copy(eyePosition);
       this.camera.quaternion.copy(quat);
     }
   }

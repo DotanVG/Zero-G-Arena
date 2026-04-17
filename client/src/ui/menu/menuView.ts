@@ -1,4 +1,5 @@
 import { isTouchDevice } from '../../platform';
+import type { MatchTeamSize } from '../../../../shared/match';
 
 /**
  * Main menu DOM view: injects the stylesheet on first use, builds the
@@ -178,6 +179,7 @@ export interface MenuElements {
   container: HTMLDivElement;
   root: HTMLElement;
   nameInput: HTMLInputElement;
+  matchSizeSelect: HTMLSelectElement;
   playButton: HTMLButtonElement;
 }
 
@@ -188,7 +190,7 @@ export function injectMenuStyle(): HTMLStyleElement {
   return style;
 }
 
-export function createMenuView(savedName: string): MenuElements {
+export function createMenuView(savedName: string, matchSize: MatchTeamSize): MenuElements {
   const mobile = isTouchDevice();
   const controlsHtml = mobile
     ? `Drag screen to look &nbsp;&middot;&nbsp; Left stick walks in gravity room<br>
@@ -223,6 +225,16 @@ export function createMenuView(savedName: string): MenuElements {
           autocomplete="off" inputmode="${mobile ? 'text' : 'text'}" />
       </div>
 
+      <div class="menu-section">
+        <div class="menu-label">Solo Match Size</div>
+        <select class="menu-input" id="menu-match-size" aria-label="Solo match size">
+          <option value="1" ${matchSize === 1 ? 'selected' : ''}>1v1 Skirmish</option>
+          <option value="5" ${matchSize === 5 ? 'selected' : ''}>5v5 Squad Clash</option>
+          <option value="10" ${matchSize === 10 ? 'selected' : ''}>10v10 Arena Rush</option>
+          <option value="20" ${matchSize === 20 ? 'selected' : ''}>20v20 Zero-G War</option>
+        </select>
+      </div>
+
       <div class="menu-divider"></div>
 
       <div class="menu-section">
@@ -240,6 +252,7 @@ export function createMenuView(savedName: string): MenuElements {
     container,
     root: container.querySelector<HTMLElement>('#menu-root')!,
     nameInput: container.querySelector<HTMLInputElement>('#menu-name')!,
+    matchSizeSelect: container.querySelector<HTMLSelectElement>('#menu-match-size')!,
     playButton: container.querySelector<HTMLButtonElement>('#btn-play')!,
   };
 }

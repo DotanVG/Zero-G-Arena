@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   MAX_LAUNCH_SPEED,
   LEGS_HIT_LAUNCH_FACTOR,
@@ -38,6 +37,8 @@ import {
   applyBarHoldPose,
   measureLeftHandGripOffset,
 } from './playerGrabPose';
+import { PlayerDamageGlow } from './playerDamageGlow';
+import { loadAlienRenderClone } from './alienRenderAsset';
 import {
   applyFloatArmTilt,
   applyArmRecoil,
@@ -79,8 +80,6 @@ export class LocalPlayer {
   public grabbedBarPos: THREE.Vector3 | null = null;
   public currentBreachTeam: 0 | 1 = 0;
 
-  public onRoundWin: ((team: 0 | 1) => void) | null = null;
-
   private respawnTimer = 0;
   private onGround = false;
   private breachJumpAnimationActive = false;
@@ -91,6 +90,7 @@ export class LocalPlayer {
   private grabPoseLocked = false;
 
   private animation = new PlayerAnimationController();
+  private damageGlow = new PlayerDamageGlow(this.team);
   private gun = new ThirdPersonGun();
   private visualQuaternion = new THREE.Quaternion();
   // Tracks the previous frame's animation name so we can detect transitions.
@@ -103,60 +103,22 @@ export class LocalPlayer {
 
   public constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Group();
-
-    const loader = new GLTFLoader();
-
-    loader.load(
-      '/models/Alien.glb',
-      (gltf) => {
-        const alien = gltf.scene;
-        alien.scale.setScalar(0.2);
-        alien.position.y = -PLAYER_RADIUS * 0.8;
-        alien.position.z = 0.3;
-        alien.rotation.y = Math.PI;
-
-        const gripLocal = measureLeftHandGripOffset(alien);
+    void loadAlienRenderClone({ team: this.team, variant: 'player' })
+      .then(({ body, bodyAnimations, helmet, helmetAnimations }) => {
+        const gripLocal = measureLeftHandGripOffset(body);
         if (gripLocal) this.leftHandGripLocal.copy(gripLocal);
 
-        this.animation.registerRig(alien, gltf.animations);
-        this.gun.attachTo(alien);
-        this.mesh.add(alien);
-      },
-      undefined,
-      (err) => console.error('[LocalPlayer] failed to load Alien.glb', err),
-    );
+        this.animation.registerRig(body, bodyAnimations);
+        this.damageGlow.attachTo(body);
+        this.gun.attachTo(body);
+        this.mesh.add(body);
 
-    loader.load(
-      '/models/Alien_Helmet.glb',
-      (gltf) => {
-        const helmet = gltf.scene;
-        helmet.scale.setScalar(0.2);
-        helmet.position.y = -PLAYER_RADIUS * 0.8;
-        helmet.position.z = 0.3;
-        helmet.rotation.y = Math.PI;
-
-        // The helmet ships with an opaque "Glass" material. Make only that
-        // material translucent so the dome reads like a visor rather than a
-        // solid black sphere over the player's head.
-        helmet.traverse((obj) => {
-          if (!(obj instanceof THREE.Mesh)) return;
-          const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-          for (const material of materials) {
-            if (material.name !== 'Glass') continue;
-            material.transparent = true;
-            material.opacity = 0.22;
-            material.depthWrite = false;
-            material.roughness = 0.12;
-            material.metalness = 0.0;
-          }
-        });
-
-        this.animation.registerRig(helmet, gltf.animations);
+        this.animation.registerRig(helmet, helmetAnimations);
         this.mesh.add(helmet);
-      },
-      undefined,
-      (err) => console.error('[LocalPlayer] failed to load Alien_Helmet.glb', err),
-    );
+      })
+      .catch((err: unknown) => {
+        console.error('[LocalPlayer] failed to load alien render assets', err);
+      });
 
     scene.add(this.mesh);
   }
@@ -207,6 +169,7 @@ export class LocalPlayer {
         break;
     }
     this.updateAnimation(input, cam, dt);
+    this.damageGlow.update(this.damage, this.phase, dt);
     const visualQuat = this.computeVisualQuaternion(cam, dt);
     if (this.phase === 'GRABBING' || this.phase === 'AIMING') {
       this.lockGripToBar(visualQuat);
@@ -220,6 +183,7 @@ export class LocalPlayer {
     integrateZeroG(this.phys, dt);
     bounceArena(this.phys);
     arena.bounceObstacles(this.phys);
+    this.tryReturnToOwnBreach(arena);
   }
 
   private updateBreach(
@@ -292,21 +256,7 @@ export class LocalPlayer {
     arena.bounceObstacles(this.phys);
 
     if (arena.isInBreachRoom(this.phys.pos, this.team)) {
-      this.currentBreachTeam = this.team;
-      this.phase = 'BREACH';
-      this.phys.vel.y = 0;
-      return;
-    }
-
-    const enemyTeam = (1 - this.team) as 0 | 1;
-    if (!this.damage.frozen
-      && arena.isGoalDoorOpen(enemyTeam)
-      && arena.isDeepInBreachRoom(this.phys.pos, enemyTeam, 1.0)) {
-      this.currentBreachTeam = enemyTeam;
-      this.phase = 'BREACH';
-      this.phys.vel.y = 0;
-      this.kills++;
-      this.onRoundWin?.(this.team);
+      this.returnToOwnBreach();
       return;
     }
 
@@ -390,6 +340,18 @@ export class LocalPlayer {
     this.grabHandGripLocal = null;
     this.grabPoseLocked = false;
     this.phase = 'FLOATING';
+  }
+
+  private tryReturnToOwnBreach(arena: Arena): void {
+    if (!arena.isInBreachRoom(this.phys.pos, this.team)) return;
+    this.returnToOwnBreach();
+  }
+
+  private returnToOwnBreach(): void {
+    this.currentBreachTeam = this.team;
+    this.phase = 'BREACH';
+    this.damage.frozen = false;
+    this.phys.vel.y = 0;
   }
 
   private updateAnimation(input: InputManager, cam: CameraController, dt: number): void {
@@ -509,7 +471,7 @@ export class LocalPlayer {
     this.phys.pos.copy(this.grabbedBarPos).sub(handOffset);
   }
 
-  public applyHit(zone: HitZone, impulse: THREE.Vector3): void {
+  public applyHit(zone: HitZone, impulse: THREE.Vector3): boolean {
     this.phys.vel.add(impulse);
 
     switch (zone) {
@@ -523,10 +485,10 @@ export class LocalPlayer {
         this.grabbedBarPos = null;
         this.grabHandGripLocal = null;
         this.grabPoseLocked = false;
-        break;
+        return true;
       case 'rightArm':
         this.damage.rightArm = true;
-        break;
+        return false;
       case 'leftArm':
         this.damage.leftArm = true;
         if (this.phase === 'GRABBING' || this.phase === 'AIMING') {
@@ -535,11 +497,11 @@ export class LocalPlayer {
           this.grabHandGripLocal = null;
           this.grabPoseLocked = false;
         }
-        break;
+        return false;
       case 'legs':
         this.damage.legs = true;
         this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
-        break;
+        return false;
     }
   }
 
@@ -551,7 +513,7 @@ export class LocalPlayer {
     return classifyHitZone(impactPoint, playerPos, playerFacing);
   }
 
-  public resetForNewRound(arena: Arena): void {
+  public resetForNewRound(arena: Arena, spawnOverride?: { x: number; y: number; z: number }): void {
     this.damage = {
       frozen: false,
       rightArm: false,
@@ -566,10 +528,12 @@ export class LocalPlayer {
     this.currentBreachTeam = this.team;
     this.phys.vel.set(0, 0, 0);
 
-    const center = arena.getBreachRoomCenter(this.team);
-    const openAxis = arena.getBreachOpenAxis(this.team);
-    const openSign = arena.getBreachOpenSign(this.team);
-    const spawn = computeBreachSpawnPosition(center, openAxis, openSign);
+    const spawn = spawnOverride ?? (() => {
+      const center = arena.getBreachRoomCenter(this.team);
+      const openAxis = arena.getBreachOpenAxis(this.team);
+      const openSign = arena.getBreachOpenSign(this.team);
+      return computeBreachSpawnPosition(center, openAxis, openSign);
+    })();
     this.phys.pos.set(spawn.x, spawn.y, spawn.z);
     this.phase = 'BREACH';
   }

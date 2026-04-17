@@ -153,6 +153,10 @@ export class Arena {
     return nearest;
   }
 
+  public getAllBarGrabPoints(): THREE.Vector3[] {
+    return this.barObjects.map((bar) => bar.getGrabPoint());
+  }
+
   public bounceObstacles(state: PhysicsState): void {
     const boxes = this.obstaclesGroup.children.map((child) =>
       new THREE.Box3().setFromObject(child as THREE.Mesh),

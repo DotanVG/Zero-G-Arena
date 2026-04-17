@@ -47,6 +47,7 @@ export interface PlayerNetState {
   kills:     number;   // breaches scored
   deaths:    number;   // times frozen
   connected: boolean;  // false = ghost body (disconnected player still floating)
+  isBot?:    boolean;
 }
 
 // --- Score ---
@@ -87,6 +88,7 @@ export interface FullPlayerInfo {
   kills:  number;
   deaths: number;
   ping:   number;
+  isBot:  boolean;
 }
 
 export interface EnemyPlayerInfo {
@@ -96,6 +98,7 @@ export interface EnemyPlayerInfo {
   kills:  number;
   deaths: number;
   ping:   number;
+  isBot:  boolean;
 }
 
 export interface TabListMsg {

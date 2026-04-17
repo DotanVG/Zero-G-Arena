@@ -5,13 +5,46 @@
  * self-contained (no global stylesheet dependency).
  */
 const HUD_MARKUP = `
+  <div id="hud-score-wrap" style="
+    position:absolute;left:50%;top:18px;
+    transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+  ">
+    <div id="hud-score-row" style="
+      display:flex;align-items:center;gap:14px;
+    ">
+      <div id="hud-score-team0" style="
+        width:16px;height:16px;border-radius:50%;
+        background:radial-gradient(circle, rgba(170,255,255,0.95) 0%, rgba(0,255,255,0.85) 34%, rgba(0,255,255,0.15) 72%, rgba(0,255,255,0) 100%);
+        box-shadow:0 0 14px rgba(0,255,255,0.85), inset 0 0 6px rgba(255,255,255,0.6);
+        border:1px solid rgba(170,255,255,0.9);
+      "></div>
+
+      <div id="hud-score" style="
+        font-size:20px;letter-spacing:0.08em;
+        text-shadow:0 0 10px rgba(0,255,255,0.5);
+      ">0 - 0</div>
+
+      <div id="hud-score-team1" style="
+        width:16px;height:16px;border-radius:50%;
+        background:radial-gradient(circle, rgba(255,200,250,0.95) 0%, rgba(255,0,255,0.85) 34%, rgba(255,0,255,0.15) 72%, rgba(255,0,255,0) 100%);
+        box-shadow:0 0 14px rgba(255,0,255,0.8), inset 0 0 6px rgba(255,255,255,0.55);
+        border:1px solid rgba(255,200,250,0.9);
+      "></div>
+    </div>
+
+    <div id="hud-round-timer" style="
+      display:none;font-size:15px;letter-spacing:0.18em;
+      color:#d8f7ff;text-shadow:0 0 10px rgba(0,255,255,0.35);
+    ">02:00</div>
+  </div>
+
   <div id="hud-countdown" style="
     display:none;position:absolute;left:50%;top:38%;
     transform:translate(-50%,-50%);font-size:90px;font-weight:bold;
     color:#fff;text-shadow:0 0 40px #00ffff;letter-spacing:0.05em;
   ">10</div>
 
-  <!-- First-round objective typewriter (shown only during first countdown) -->
   <div id="hud-objective" style="
     display:none;position:absolute;left:50%;top:58%;
     transform:translateX(-50%);font-size:16px;letter-spacing:3px;
@@ -23,19 +56,14 @@ const HUD_MARKUP = `
     position:absolute;left:50%;top:50%;
     transform:translate(-50%,-50%);
     width:6px;height:6px;border-radius:50%;background:#fff;opacity:0.85;
+    box-shadow:0 0 8px rgba(255,255,255,0.3);
   "></div>
-
-  <div id="hud-score" style="
-    position:absolute;left:50%;top:18px;
-    transform:translateX(-50%);font-size:20px;letter-spacing:0.08em;
-    text-shadow:0 0 10px rgba(0,255,255,0.5);
-  ">0 — 0</div>
 
   <div id="hud-breach" style="
     display:none;position:absolute;bottom:22px;left:50%;
     transform:translateX(-50%);font-size:13px;color:#88ddff;opacity:0.75;
     white-space:nowrap;
-  ">▼ BREACH ROOM — GRAVITY ACTIVE ▼</div>
+  ">BREACH ROOM - GRAVITY ACTIVE</div>
 
   <div id="hud-grab" style="
     display:none;position:absolute;left:50%;bottom:28%;
@@ -60,7 +88,7 @@ const HUD_MARKUP = `
 
   <div id="hud-round-end" style="
     display:none;position:absolute;inset:0;
-    display:none;align-items:center;justify-content:center;
+    align-items:center;justify-content:center;
     background:rgba(0,0,0,0.6);font-size:52px;
     letter-spacing:0.08em;text-shadow:0 0 30px #fff;
   "></div>
@@ -76,9 +104,14 @@ const HUD_MARKUP = `
 
 export interface HudElements {
   root: HTMLDivElement;
+  scoreWrap: HTMLDivElement;
   countdown: HTMLDivElement;
   objective: HTMLDivElement;
+  crosshair: HTMLDivElement;
   score: HTMLDivElement;
+  scoreTeam0: HTMLDivElement;
+  scoreTeam1: HTMLDivElement;
+  roundTimer: HTMLDivElement;
   breach: HTMLDivElement;
   grab: HTMLDivElement;
   powerWrap: HTMLDivElement;
@@ -110,9 +143,14 @@ export function createHudView(): HudElements {
 
   return {
     root,
+    scoreWrap: q('hud-score-wrap'),
     countdown: q('hud-countdown'),
     objective: q('hud-objective'),
+    crosshair: q('hud-crosshair'),
     score: q('hud-score'),
+    scoreTeam0: q('hud-score-team0'),
+    scoreTeam1: q('hud-score-team1'),
+    roundTimer: q('hud-round-timer'),
     breach: q('hud-breach'),
     grab: q('hud-grab'),
     powerWrap: q('hud-power-wrap'),

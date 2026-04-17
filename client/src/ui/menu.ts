@@ -1,7 +1,14 @@
 import { createMenuView, injectMenuStyle, type MenuElements } from './menu/menuView';
 import { isTouchDevice } from '../platform';
+import { isMatchTeamSize, type MatchTeamSize } from '../../../shared/match';
 
 const STORAGE_KEY = 'orbital_player_name';
+const MATCH_SIZE_STORAGE_KEY = 'orbital_match_size';
+
+export interface PlaySelection {
+  name: string;
+  teamSize: MatchTeamSize;
+}
 
 /**
  * MainMenu controller: injects the style once, mounts/unmounts the view
@@ -12,7 +19,7 @@ export class MainMenu {
   private menu: MenuElements | null = null;
   private styleEl: HTMLStyleElement | null = null;
 
-  public onPlay: (() => void) | null = null;
+  public onPlay: ((selection: PlaySelection) => void) | null = null;
 
   public show(): void {
     this.hide();
@@ -21,12 +28,19 @@ export class MainMenu {
     }
 
     const savedName = localStorage.getItem(STORAGE_KEY) ?? '';
-    const elements = createMenuView(savedName);
+    const savedSize = Number(localStorage.getItem(MATCH_SIZE_STORAGE_KEY) ?? '1');
+    const elements = createMenuView(
+      savedName,
+      isMatchTeamSize(savedSize) ? savedSize : 1,
+    );
     this.menu = elements;
 
     elements.nameInput.addEventListener('input', () => {
       const v = elements.nameInput.value.trim();
       if (v) localStorage.setItem(STORAGE_KEY, v);
+    });
+    elements.matchSizeSelect.addEventListener('change', () => {
+      localStorage.setItem(MATCH_SIZE_STORAGE_KEY, elements.matchSizeSelect.value);
     });
     // Skip auto-focus on mobile to avoid unwanted virtual keyboard on load
     if (!isTouchDevice()) {
@@ -34,8 +48,8 @@ export class MainMenu {
     }
 
     elements.playButton.addEventListener('click', () => {
-      this.saveName();
-      this.fadeOut(() => this.onPlay?.());
+      const selection = this.saveSelection();
+      this.fadeOut(() => this.onPlay?.(selection));
     });
   }
 
@@ -64,8 +78,13 @@ export class MainMenu {
     this.styleEl = null;
   }
 
-  private saveName(): void {
+  private saveSelection(): PlaySelection {
     const name = this.menu?.nameInput.value.trim();
-    if (name) localStorage.setItem(STORAGE_KEY, name);
+    const matchSizeValue = Number(this.menu?.matchSizeSelect.value ?? '1');
+    const teamSize = isMatchTeamSize(matchSizeValue) ? matchSizeValue : 1;
+    const finalName = name || 'Pilot';
+    localStorage.setItem(STORAGE_KEY, finalName);
+    localStorage.setItem(MATCH_SIZE_STORAGE_KEY, String(teamSize));
+    return { name: finalName, teamSize };
   }
 }

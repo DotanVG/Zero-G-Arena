@@ -10,6 +10,8 @@ const THIRD_PERSON_GUN_SCALE = 0.28;
 const DEFAULT_OFFSET = new THREE.Vector3(0.02, 0.03, -0.08);
 const DEFAULT_ROTATION = new THREE.Euler(-17.72, 0.0, 1.31);
 
+let gunPrototypePromise: Promise<THREE.Group> | null = null;
+
 export interface ThirdPersonGunTuningState {
   enabled: boolean;
   offset: THREE.Vector3;
@@ -42,36 +44,32 @@ export class ThirdPersonGun {
       return;
     }
 
-    const loader = new GLTFLoader();
-    loader.load(
-      '/models/Ray Gun.glb',
-      (gltf) => {
-        const gun = gltf.scene;
-        gun.scale.setScalar(THIRD_PERSON_GUN_SCALE);
+    void loadGunPrototype()
+      .then((prototype) => {
+        const gun = prototype.clone(true);
         gun.position.copy(this.offset);
         gun.rotation.copy(this.rotation);
         gun.visible = this.visible;
-
-        gun.traverse((obj) => {
-          if (!(obj instanceof THREE.Mesh)) return;
-          obj.castShadow = true;
-          obj.receiveShadow = true;
-          obj.frustumCulled = false;
-        });
 
         this.muzzleLocal = this.computeMuzzleLocal(gun);
         palm.add(gun);
         this.model = gun;
         this.applyTransform();
-      },
-      undefined,
-      (err) => console.error('[ThirdPersonGun] failed to load Ray Gun.glb', err),
-    );
+      })
+      .catch((err: unknown) => console.error('[ThirdPersonGun] failed to load Ray Gun.glb', err));
   }
 
   public setVisible(visible: boolean): void {
     this.visible = visible;
     if (this.model) this.model.visible = visible;
+  }
+
+  public dispose(): void {
+    if (this.model?.parent) {
+      this.model.parent.remove(this.model);
+    }
+    this.model = null;
+    this.muzzleLocal = null;
   }
 
   public getMuzzleWorldPosition(): THREE.Vector3 | null {
@@ -179,4 +177,24 @@ export class ThirdPersonGun {
       ?? root.children.find((child) => child.name.toLowerCase().includes('muzzle'))
       ?? null;
   }
+}
+
+async function loadGunPrototype(): Promise<THREE.Group> {
+  if (!gunPrototypePromise) {
+    gunPrototypePromise = new GLTFLoader()
+      .loadAsync('/models/Ray Gun.glb')
+      .then((gltf) => {
+        const gun = gltf.scene;
+        gun.scale.setScalar(THIRD_PERSON_GUN_SCALE);
+        gun.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+          obj.frustumCulled = false;
+        });
+        return gun;
+      });
+  }
+
+  return gunPrototypePromise;
 }

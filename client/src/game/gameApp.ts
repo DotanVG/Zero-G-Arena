@@ -1,48 +1,44 @@
-import { Arena } from '../arena/arena';
-import { CameraController } from '../camera';
-import { InputManager } from '../input';
-import { LocalPlayer } from '../player';
-import { HUD } from '../render/hud';
-import { SceneManager } from '../render/scene';
-import { GunViewModel } from '../render/gun';
-import { MainMenu } from '../ui/menu';
-import { MobileControls } from '../ui/mobileControls';
-import { isTouchDevice } from '../platform';
-import { generateArenaLayout } from '../arena/states';
-import { FEATURE_FLAGS } from '../featureFlags';
-import { GRAB_RADIUS } from '../../../shared/constants';
-import type { FullPlayerInfo, EnemyPlayerInfo } from '../../../shared/schema';
-import { RoundController } from './roundController';
-import { ProjectileSystem } from './projectileSystem';
-import { buildShotFromCamera } from './weaponFire';
-import { GunTuneOverlay } from './gunTuneOverlay';
-import { FloatArmTuneOverlay } from './floatArmTuneOverlay';
-import { cameraYawFacingBreachOpening } from './cameraYawFromBreach';
+import { GRAB_RADIUS } from "../../../shared/constants";
+import { generateArenaLayout } from "../arena/states";
+import { Arena } from "../arena/arena";
+import { CameraController } from "../camera";
+import { FEATURE_FLAGS } from "../featureFlags";
+import { InputManager } from "../input";
+import { LocalMatch } from "../match/localMatch";
+import { isTouchDevice } from "../platform";
+import { LocalPlayer } from "../player";
+import { GunViewModel } from "../render/gun";
+import { HUD } from "../render/hud";
+import { SceneManager } from "../render/scene";
+import { KillFeed } from "../ui/kill-feed";
+import { MainMenu } from "../ui/menu";
+import { MobileControls } from "../ui/mobileControls";
+import { cameraYawFacingBreachOpening } from "./cameraYawFromBreach";
+import { FloatArmTuneOverlay } from "./floatArmTuneOverlay";
+import { ProjectileSystem } from "./projectileSystem";
+import { RoundController } from "./roundController";
+import { GunTuneOverlay } from "./gunTuneOverlay";
+import { buildShotFromCamera } from "./weaponFire";
 
-/**
- * Top-level game composition. Owns every subsystem, wires callbacks
- * between them, and runs the per-frame loop. Responsibilities are
- * intentionally thin: anything non-trivial lives in a game/* submodule
- * or one of the domain classes (LocalPlayer, Arena, InputManager, etc.).
- */
 export class App {
-  private sceneMgr: SceneManager;
-  private input: InputManager;
-  private cam: CameraController;
-  private player: LocalPlayer;
   private arena: Arena;
-  private hud: HUD;
-  private menu: MainMenu;
-  private round = new RoundController();
-  private projectiles: ProjectileSystem;
+  private cam: CameraController;
+  private floatArmTuneOverlay = new FloatArmTuneOverlay();
   private gun: GunViewModel;
   private gunTuneOverlay = new GunTuneOverlay();
-  private floatArmTuneOverlay = new FloatArmTuneOverlay();
-
+  private hud: HUD;
+  private input: InputManager;
+  private killFeed = new KillFeed();
   private lastTime = 0;
-  private thirdPerson = false;
+  private match: LocalMatch;
+  private menu: MainMenu;
   private readonly mobile = isTouchDevice();
   private mobileControls: MobileControls | null = null;
+  private player: LocalPlayer;
+  private projectiles: ProjectileSystem;
+  private round = new RoundController();
+  private sceneMgr: SceneManager;
+  private thirdPerson = false;
 
   public constructor() {
     this.sceneMgr = new SceneManager();
@@ -53,24 +49,49 @@ export class App {
     this.hud = new HUD();
     this.menu = new MainMenu();
     this.projectiles = new ProjectileSystem(this.sceneMgr.getScene());
+    this.match = new LocalMatch(this.sceneMgr.getScene());
 
-    // Camera must be in the scene graph so parented children (gun model) render.
     this.sceneMgr.getScene().add(this.sceneMgr.getCamera());
     this.gun = new GunViewModel(this.sceneMgr.getCamera());
 
-    this.player.onRoundWin = (team) => this.onRoundWin(team);
+    this.match.onEvent = (event) => {
+      switch (event.type) {
+        case "hitConfirm":
+          this.hud.triggerHitConfirm(event.team);
+          break;
+        case "freeze":
+          this.killFeed.addKill(
+            event.killerName,
+            event.killerTeam,
+            event.victimName,
+            event.victimTeam,
+          );
+          break;
+        case "score":
+          this.killFeed.addScore(event.scorerName, event.scorerTeam);
+          break;
+        case "roundWin":
+          this.onRoundWin(event.winningTeam);
+          break;
+        case "roundTie":
+          this.onRoundTie();
+          break;
+      }
+    };
     this.round.onBeginRound = () => this.beginNewRound();
     this.round.onCountdownEnd = () => this.arena.setPortalDoorsOpen(true);
+    this.round.onRoundTimeout = () => this.match.handleRoundTimeout();
 
     if (this.mobile) {
       this.mobileControls = new MobileControls(this.input);
       this.mobileControls.mount();
-      this.mobileControls.hide(); // hidden until play starts
-      this.mobileControls.onViewToggle = () => { this.thirdPerson = !this.thirdPerson; };
+      this.mobileControls.hide();
+      this.mobileControls.onViewToggle = () => {
+        this.thirdPerson = !this.thirdPerson;
+      };
     } else {
-      // Desktop only: re-lock pointer when clicking back onto the canvas mid-game
-      this.sceneMgr.getRenderer().domElement.addEventListener('mousedown', () => {
-        if (this.round.getPhase() === 'LOBBY' || this.menu.isVisible() || this.input.isLocked()) {
+      this.sceneMgr.getRenderer().domElement.addEventListener("mousedown", () => {
+        if (this.round.getPhase() === "LOBBY" || this.menu.isVisible() || this.input.isLocked()) {
           return;
         }
         this.input.lockPointer(this.sceneMgr.getRenderer().domElement);
@@ -80,17 +101,24 @@ export class App {
 
   public start(): void {
     this.menu.show();
-    this.menu.onPlay = () => {
+    this.menu.onPlay = (selection) => {
+      this.match.startNewGame({
+        humanName: selection.name,
+        humanTeam: 0,
+        teamSize: selection.teamSize,
+      });
+
       if (this.mobile) {
         this.input.setMobileControlsActive(true);
         this.mobileControls?.show();
       } else {
         this.input.lockPointer(this.sceneMgr.getRenderer().domElement);
       }
+
       this.beginNewRound();
     };
 
-    requestAnimationFrame((t) => this.loop(t));
+    requestAnimationFrame((timestamp) => this.loop(timestamp));
   }
 
   private beginNewRound(): void {
@@ -99,12 +127,10 @@ export class App {
 
     const layout = generateArenaLayout();
     this.arena.loadLayout(layout);
-    this.player.resetForNewRound(this.arena);
+    this.match.resetForRound(this.arena, this.player);
 
     const openAxis = this.arena.getBreachOpenAxis(this.player.team);
     const openSign = this.arena.getBreachOpenSign(this.player.team);
-    // resetForBreachSpawn seeds zeroGQuat so subsequent setZeroGMode(false)
-    // calls don't overwrite the correct yaw with stale zero-G orientation.
     this.cam.resetForBreachSpawn(cameraYawFacingBreachOpening(openAxis, openSign));
 
     this.arena.setPortalDoorsOpen(false);
@@ -113,8 +139,15 @@ export class App {
 
   private onRoundWin(team: 0 | 1): void {
     if (!this.round.isPlaying()) return;
-    const label = team === 0 ? 'CYAN WINS' : 'MAGENTA WINS';
-    this.hud.showRoundEnd(label);
+    this.projectiles.clear();
+    this.hud.showRoundEnd(team === 0 ? "CYAN WINS" : "MAGENTA WINS");
+    this.round.endRound();
+  }
+
+  private onRoundTie(): void {
+    if (!this.round.isPlaying()) return;
+    this.projectiles.clear();
+    this.hud.showRoundEnd("TIE");
     this.round.endRound();
   }
 
@@ -122,10 +155,8 @@ export class App {
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.033);
     this.lastTime = timestamp;
 
-    // CRITICAL ORDER: mode switches must run before consumeMouseDelta so
-    // InputManager routes mouse-Y correctly between look and aim.
-    this.input.setAimingMode(this.player.phase === 'AIMING');
-    this.cam.setZeroGMode(this.player.phase !== 'BREACH');
+    this.input.setAimingMode(this.player.phase === "AIMING");
+    this.cam.setZeroGMode(this.player.phase !== "BREACH");
     this.cam.tickTransition(dt);
 
     const { dx, dy } = this.input.consumeMouseDelta();
@@ -137,12 +168,19 @@ export class App {
     this.player.update(this.input, this.cam, this.arena, dt);
     this.arena.update(dt);
 
+    const botShots = this.match.tick(dt, this.arena, this.player, this.round.isPlaying());
+    for (const shot of botShots) {
+      this.projectiles.spawn(shot.origin, shot.direction, shot.team, shot.ownerId);
+    }
+
     this.tickWeaponFire();
     this.projectiles.update(
       dt,
       this.arena.getObstacleAABBs(),
       this.arena.getPortalBarrierAABBs(),
+      this.match.getProjectileTargets(this.player),
       (hitPos, color) => this.arena.triggerPortalImpact(hitPos, color),
+      (hit) => this.match.handleProjectileHit(hit, this.player, this.cam),
     );
     this.tickGunTuning();
 
@@ -157,13 +195,14 @@ export class App {
     this.renderDebugTuningOverlay();
 
     this.sceneMgr.render();
-    requestAnimationFrame((t) => this.loop(t));
+    requestAnimationFrame((nextTimestamp) => this.loop(nextTimestamp));
   }
 
   private tickWeaponFire(): void {
-    const inZeroG = this.player.phase === 'FLOATING'
-      || this.player.phase === 'GRABBING'
-      || this.player.phase === 'AIMING';
+    const inZeroG = this.player.phase === "FLOATING"
+      || this.player.phase === "GRABBING"
+      || this.player.phase === "AIMING";
+
     if (!this.round.isPlaying()) return;
     if (!this.input.canControlGame() || !inZeroG) return;
     if (!this.player.canFire() || !this.input.consumeFire()) return;
@@ -172,7 +211,8 @@ export class App {
       || (FEATURE_FLAGS.thirdPersonLookBehind && this.input.isSelfieHeld());
     const shot = buildShotFromCamera(this.player, this.cam, this.gun, useThirdPersonMuzzle);
     if (!shot) return;
-    this.projectiles.spawn(shot.origin, shot.direction, shot.color);
+
+    this.projectiles.spawn(shot.origin, shot.direction, this.player.team, "local-player");
     this.player.triggerArmRecoil();
   }
 
@@ -180,7 +220,7 @@ export class App {
     const tuning = FEATURE_FLAGS.debugTuning;
     if (!tuning.enabled) return;
 
-    if (tuning.target === 'Pistol') {
+    if (tuning.target === "Pistol") {
       if (this.input.consumeGunTuneToggle()) this.player.toggleThirdPersonGunTuning();
       if (this.input.consumeGunTuneReset()) this.player.resetThirdPersonGunTuning();
       if (this.input.consumeGunTunePrint()) {
@@ -221,12 +261,12 @@ export class App {
 
     this.gunTuneOverlay.render(
       this.player.getThirdPersonGunTuningState(),
-      tuning.enabled && tuning.target === 'Pistol',
+      tuning.enabled && tuning.target === "Pistol",
     );
 
     if (!this.player.isFloatLimbTarget(tuning.target)) {
       this.floatArmTuneOverlay.render(
-        { target: 'FloatRightArm', rotation: this.player.getFloatLimbTuningState('FloatRightArm').rotation },
+        { target: "FloatRightArm", rotation: this.player.getFloatLimbTuningState("FloatRightArm").rotation },
         false,
         false,
       );
@@ -244,33 +284,33 @@ export class App {
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        console.info('[DebugTuning] Copied tuning values to clipboard.');
+        console.info("[DebugTuning] Copied tuning values to clipboard.");
         return;
       }
     } catch (error) {
-      console.warn('[DebugTuning] Clipboard API failed, trying fallback copy.', error);
+      console.warn("[DebugTuning] Clipboard API failed, trying fallback copy.", error);
     }
 
-    const textarea = document.createElement('textarea');
+    const textarea = document.createElement("textarea");
     textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    textarea.style.pointerEvents = 'none';
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
     document.body.appendChild(textarea);
     textarea.focus();
     textarea.select();
     textarea.setSelectionRange(0, textarea.value.length);
 
     try {
-      const copied = document.execCommand('copy');
+      const copied = document.execCommand("copy");
       if (copied) {
-        console.info('[DebugTuning] Copied tuning values to clipboard.');
+        console.info("[DebugTuning] Copied tuning values to clipboard.");
       } else {
-        console.warn('[DebugTuning] Clipboard copy failed; value is still in the console.');
+        console.warn("[DebugTuning] Clipboard copy failed; value is still in the console.");
       }
     } catch (error) {
-      console.warn('[DebugTuning] Clipboard fallback failed; value is still in the console.', error);
+      console.warn("[DebugTuning] Clipboard fallback failed; value is still in the console.", error);
     } finally {
       document.body.removeChild(textarea);
     }
@@ -278,49 +318,39 @@ export class App {
 
   private updateGunVisibility(isSelfie: boolean): void {
     const phase = this.round.getPhase();
-    const playerAlive = this.player.phase !== 'RESPAWNING';
-    const roundActive = phase !== 'LOBBY';
+    const playerAlive = this.player.phase !== "RESPAWNING";
+    const roundActive = phase !== "LOBBY";
 
-    const thirdPersonGunVisible = roundActive && playerAlive && (this.thirdPerson || isSelfie);
-    this.player.setThirdPersonGunVisible(thirdPersonGunVisible);
-
-    const firstPersonGunVisible = roundActive && playerAlive && !this.thirdPerson && !isSelfie;
-    this.gun.setVisible(firstPersonGunVisible);
+    this.player.setThirdPersonGunVisible(
+      roundActive && playerAlive && (this.thirdPerson || isSelfie),
+    );
+    this.gun.setVisible(roundActive && playerAlive && !this.thirdPerson && !isSelfie);
   }
 
   private updateHud(dt: number): void {
     let nearBar = this.arena.getNearestBar(this.player.getPosition(), GRAB_RADIUS) !== null;
-    if (this.player.phase === 'BREACH' && !this.arena.isGoalDoorOpen(this.player.currentBreachTeam)) {
+    if (this.player.phase === "BREACH" && !this.arena.isGoalDoorOpen(this.player.currentBreachTeam)) {
       nearBar = false;
     }
     const inBreach = this.arena.isInBreachRoom(this.player.getPosition(), this.player.team);
 
-    // Sync mobile controls to current game state
     if (this.mobile && this.mobileControls) {
       const canGrab = !this.player.damage.leftArm && !this.player.damage.frozen;
       this.mobileControls.setPhase(this.player.phase);
       this.mobileControls.setNearBar(nearBar, canGrab);
-      const showPower = this.player.phase === 'GRABBING' || this.player.phase === 'AIMING';
+      const showPower = this.player.phase === "GRABBING" || this.player.phase === "AIMING";
       const max = this.player.maxLaunchPower();
       const pct = max > 0 ? this.player.launchPower / max : 0;
       this.mobileControls.setPowerLevel(pct, showPower);
       this.mobileControls.setViewMode(this.thirdPerson);
     }
 
-    const ownTeam: FullPlayerInfo[] = [{
-      id: 'local',
-      name: 'You',
-      frozen: this.player.damage.frozen,
-      kills: this.player.kills,
-      deaths: this.player.deaths,
-      ping: 0,
-    }];
-    const enemyTeam: EnemyPlayerInfo[] = [];
-
+    const rosters = this.match.getHudRosters(this.player);
     this.hud.update({
-      score: { team0: this.player.kills, team1: 0 },
+      score: this.match.getScore(),
       phase: this.round.getPhase(),
       countdown: this.round.getCountdown(),
+      roundTimeRemaining: this.round.getRoundTimeRemaining(),
       playerPhase: this.player.phase,
       launchPower: this.player.launchPower,
       maxLaunchPower: this.player.maxLaunchPower(),
@@ -328,8 +358,8 @@ export class App {
       inBreach,
       damage: this.player.damage,
       tabHeld: this.input.isTabHeld(),
-      ownTeam,
-      enemyTeam,
+      ownTeam: rosters.ownTeam,
+      enemyTeam: rosters.enemyTeam,
       dt,
       team: this.player.team,
     });

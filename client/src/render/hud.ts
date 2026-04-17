@@ -1,6 +1,9 @@
 import type { DamageState, FullPlayerInfo, EnemyPlayerInfo } from '../../../shared/schema';
 import { createHudView, type HudElements } from './hud/hudView';
 import { buildScoreboardHtml } from './hud/scoreboard';
+import { isTouchDevice } from '../platform';
+
+const IS_MOBILE = isTouchDevice();
 
 export type GamePhase = 'LOBBY' | 'COUNTDOWN' | 'PLAYING' | 'ROUND_END';
 
@@ -78,15 +81,20 @@ export class HUD {
     let show = false;
 
     if (playerPhase === 'AIMING') {
-      show = true;
-      promptText = '↓ Pull mouse to charge power  ·  Release [SPACE] to launch';
-      el.style.fontSize = '14px';
-      el.style.color = '#ffff88';
-      el.style.textShadow = '0 0 8px #ffaa00';
+      // On mobile the vertical power bar is sufficient — skip text prompt.
+      if (!IS_MOBILE) {
+        show = true;
+        promptText = '↓ Pull mouse to charge power  ·  Release [SPACE] to launch';
+        el.style.fontSize = '14px';
+        el.style.color = '#ffff88';
+        el.style.textShadow = '0 0 8px #ffaa00';
+      }
     } else if (playerPhase === 'GRABBING') {
       show = true;
-      promptText = 'Hold [SPACE] to aim  ·  [E] to release bar';
-      el.style.fontSize = '15px';
+      promptText = IS_MOBILE
+        ? 'Hold LAUNCH & drag ↓ to charge'
+        : 'Hold [SPACE] to aim  ·  [E] to release bar';
+      el.style.fontSize = IS_MOBILE ? '13px' : '15px';
       el.style.color = '#aaffff';
       el.style.textShadow = '0 0 8px #00ffff';
     } else if (
@@ -95,11 +103,14 @@ export class HUD {
       && !damage.leftArm
       && !damage.frozen
     ) {
-      show = true;
-      promptText = '[E]  GRAB BAR';
-      el.style.fontSize = '17px';
-      el.style.color = '#aaffff';
-      el.style.textShadow = '0 0 8px #00ffff';
+      // On mobile the GRAB button appears instead; skip this text.
+      if (!IS_MOBILE) {
+        show = true;
+        promptText = '[E]  GRAB BAR';
+        el.style.fontSize = '17px';
+        el.style.color = '#aaffff';
+        el.style.textShadow = '0 0 8px #00ffff';
+      }
     }
 
     el.style.display = show ? 'block' : 'none';
@@ -111,6 +122,11 @@ export class HUD {
     launchPower: number,
     maxLaunchPower: number,
   ): void {
+    // On mobile the MobileControls vertical bar handles power display.
+    if (IS_MOBILE) {
+      this.view.powerWrap.style.display = 'none';
+      return;
+    }
     const showBar = playerPhase === 'GRABBING' || playerPhase === 'AIMING';
     this.view.powerWrap.style.display = showBar ? 'block' : 'none';
 

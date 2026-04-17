@@ -294,6 +294,17 @@ export class App {
     }
     const inBreach = this.arena.isInBreachRoom(this.player.getPosition(), this.player.team);
 
+    // Sync mobile controls to current game state
+    if (this.mobile && this.mobileControls) {
+      const canGrab = !this.player.damage.leftArm && !this.player.damage.frozen;
+      this.mobileControls.setPhase(this.player.phase);
+      this.mobileControls.setNearBar(nearBar, canGrab);
+      const showPower = this.player.phase === 'GRABBING' || this.player.phase === 'AIMING';
+      const max = this.player.maxLaunchPower();
+      const pct = max > 0 ? this.player.launchPower / max : 0;
+      this.mobileControls.setPowerLevel(pct, showPower);
+    }
+
     const ownTeam: FullPlayerInfo[] = [{
       id: 'local',
       name: 'You',

@@ -134,6 +134,17 @@ export class PortalEnergyWall {
    * Call this whenever a projectile hits the portal barrier.
    */
   public spawnImpact(worldPos: THREE.Vector3, bulletColor: number): void {
+    // Evict the oldest impact to cap concurrent geometry allocations on mobile.
+    if (this.impacts.length >= 4) {
+      const oldest = this.impacts.shift()!;
+      this.scene.remove(oldest.ring);
+      (oldest.ring.material as THREE.Material).dispose();
+      oldest.ring.geometry.dispose();
+      this.scene.remove(oldest.sparks);
+      (oldest.sparks.material as THREE.Material).dispose();
+      oldest.sparks.geometry.dispose();
+    }
+
     const col = bulletColor;
 
     // ── Expanding ring (oriented to lie in the portal plane) ──────────

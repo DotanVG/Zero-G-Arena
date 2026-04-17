@@ -26,6 +26,7 @@ const HUD_MARKUP = `
   <div id="hud-breach" style="
     display:none;position:absolute;bottom:22px;left:50%;
     transform:translateX(-50%);font-size:13px;color:#88ddff;opacity:0.75;
+    white-space:nowrap;
   ">▼ BREACH ROOM — GRAVITY ACTIVE ▼</div>
 
   <div id="hud-grab" style="

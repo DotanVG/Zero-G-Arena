@@ -19,6 +19,10 @@ export class KillFeed {
     document.body.appendChild(this.container);
   }
 
+  public setVisible(visible: boolean): void {
+    this.container.style.display = visible ? "flex" : "none";
+  }
+
   public addKill(killerName: string, killerTeam: 0 | 1, victimName: string, victimTeam: 0 | 1): void {
     const entry = document.createElement("div");
     const killerColor = killerTeam === 0 ? "#00ffff" : "#ff00ff";

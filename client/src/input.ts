@@ -256,6 +256,12 @@ export class InputManager {
     void canvas.requestPointerLock();
   }
 
+  public exitPointerLock(): void {
+    if (document.pointerLockElement) {
+      void document.exitPointerLock();
+    }
+  }
+
   public isLocked(): boolean {
     return document.pointerLockElement != null;
   }

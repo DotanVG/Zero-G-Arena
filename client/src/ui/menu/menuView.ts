@@ -180,7 +180,8 @@ export interface MenuElements {
   root: HTMLElement;
   nameInput: HTMLInputElement;
   matchSizeSelect: HTMLSelectElement;
-  playButton: HTMLButtonElement;
+  playSoloButton: HTMLButtonElement;
+  playOnlineButton: HTMLButtonElement;
 }
 
 export function injectMenuStyle(): HTMLStyleElement {
@@ -237,8 +238,9 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
 
       <div class="menu-divider"></div>
 
-      <div class="menu-section">
-        <button class="menu-btn" id="btn-play">PLAY SOLO</button>
+      <div class="menu-section" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <button class="menu-btn" id="btn-play-solo">PLAY SOLO</button>
+        <button class="menu-btn" id="btn-play-online">PLAY ONLINE</button>
       </div>
 
       <div class="menu-controls">${controlsHtml}</div>
@@ -253,7 +255,8 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
     root: container.querySelector<HTMLElement>('#menu-root')!,
     nameInput: container.querySelector<HTMLInputElement>('#menu-name')!,
     matchSizeSelect: container.querySelector<HTMLSelectElement>('#menu-match-size')!,
-    playButton: container.querySelector<HTMLButtonElement>('#btn-play')!,
+    playSoloButton: container.querySelector<HTMLButtonElement>('#btn-play-solo')!,
+    playOnlineButton: container.querySelector<HTMLButtonElement>('#btn-play-online')!,
   };
 }
 

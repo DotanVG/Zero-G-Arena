@@ -19,7 +19,8 @@ export class MainMenu {
   private menu: MenuElements | null = null;
   private styleEl: HTMLStyleElement | null = null;
 
-  public onPlay: ((selection: PlaySelection) => void) | null = null;
+  public onPlaySolo: ((selection: PlaySelection) => void) | null = null;
+  public onPlayOnline: ((selection: PlaySelection) => void) | null = null;
 
   public show(): void {
     this.hide();
@@ -47,9 +48,13 @@ export class MainMenu {
       elements.nameInput.focus();
     }
 
-    elements.playButton.addEventListener('click', () => {
+    elements.playSoloButton.addEventListener('click', () => {
       const selection = this.saveSelection();
-      this.fadeOut(() => this.onPlay?.(selection));
+      this.fadeOut(() => this.onPlaySolo?.(selection));
+    });
+    elements.playOnlineButton.addEventListener('click', () => {
+      const selection = this.saveSelection();
+      this.fadeOut(() => this.onPlayOnline?.(selection));
     });
   }
 

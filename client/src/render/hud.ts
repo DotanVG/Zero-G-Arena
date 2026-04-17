@@ -40,6 +40,10 @@ export class HUD {
     this.view = createHudView();
   }
 
+  public setVisible(visible: boolean): void {
+    this.view.root.style.display = visible ? "block" : "none";
+  }
+
   public showRoundEnd(message: string): void {
     this.view.roundEnd.textContent = message;
     this.view.roundEnd.style.display = 'flex';

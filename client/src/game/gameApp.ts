@@ -19,8 +19,12 @@ import { ProjectileSystem } from "./projectileSystem";
 import { RoundController } from "./roundController";
 import { GunTuneOverlay } from "./gunTuneOverlay";
 import { buildShotFromCamera } from "./weaponFire";
+import { NetClient } from "../net/client";
+import { MultiplayerLobby } from "../ui/multiplayerLobby";
+import type { PlaySelection } from "../ui/menu";
 
 export class App {
+  private appMode: "menu" | "solo" | "online" = "menu";
   private arena: Arena;
   private cam: CameraController;
   private floatArmTuneOverlay = new FloatArmTuneOverlay();
@@ -32,8 +36,10 @@ export class App {
   private lastTime = 0;
   private match: LocalMatch;
   private menu: MainMenu;
+  private multiplayer = new MultiplayerLobby();
   private readonly mobile = isTouchDevice();
   private mobileControls: MobileControls | null = null;
+  private net = new NetClient();
   private player: LocalPlayer;
   private projectiles: ProjectileSystem;
   private round = new RoundController();
@@ -50,6 +56,8 @@ export class App {
     this.menu = new MainMenu();
     this.projectiles = new ProjectileSystem(this.sceneMgr.getScene());
     this.match = new LocalMatch(this.sceneMgr.getScene());
+    this.hud.setVisible(false);
+    this.killFeed.setVisible(false);
 
     this.sceneMgr.getScene().add(this.sceneMgr.getCamera());
     this.gun = new GunViewModel(this.sceneMgr.getCamera());
@@ -81,6 +89,32 @@ export class App {
     this.round.onBeginRound = () => this.beginNewRound();
     this.round.onCountdownEnd = () => this.arena.setPortalDoorsOpen(true);
     this.round.onRoundTimeout = () => this.match.handleRoundTimeout();
+    this.net.onStateChange = (state) => {
+      this.multiplayer.render(state);
+    };
+    this.net.onLobbyEvent = (event) => {
+      this.multiplayer.setStatus(event.text, event.type);
+    };
+    this.net.onLeave = () => {
+      if (this.appMode === "online") {
+        void this.returnToMenuFromOnline();
+      }
+    };
+    this.multiplayer.onLeaveLobby = () => {
+      void this.returnToMenuFromOnline();
+    };
+    this.multiplayer.onReadyChange = (ready) => {
+      this.net.setReady(ready);
+    };
+    this.multiplayer.onSwitchTeam = (team) => {
+      this.net.switchTeam(team);
+    };
+    this.multiplayer.onFillBots = (fill) => {
+      this.net.fillBots(fill);
+    };
+    this.multiplayer.onTeamSizeChange = (teamSize) => {
+      this.net.setTeamSize(teamSize);
+    };
 
     if (this.mobile) {
       this.mobileControls = new MobileControls(this.input);
@@ -101,21 +135,11 @@ export class App {
 
   public start(): void {
     this.menu.show();
-    this.menu.onPlay = (selection) => {
-      this.match.startNewGame({
-        humanName: selection.name,
-        humanTeam: 0,
-        teamSize: selection.teamSize,
-      });
-
-      if (this.mobile) {
-        this.input.setMobileControlsActive(true);
-        this.mobileControls?.show();
-      } else {
-        this.input.lockPointer(this.sceneMgr.getRenderer().domElement);
-      }
-
-      this.beginNewRound();
+    this.menu.onPlaySolo = (selection) => {
+      this.startSoloMatch(selection);
+    };
+    this.menu.onPlayOnline = (selection) => {
+      void this.startOnlineLobby(selection);
     };
 
     requestAnimationFrame((timestamp) => this.loop(timestamp));
@@ -154,6 +178,12 @@ export class App {
   private loop(timestamp: number): void {
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.033);
     this.lastTime = timestamp;
+
+    if (this.appMode !== "solo") {
+      this.sceneMgr.render();
+      requestAnimationFrame((nextTimestamp) => this.loop(nextTimestamp));
+      return;
+    }
 
     this.input.setAimingMode(this.player.phase === "AIMING");
     this.cam.setZeroGMode(this.player.phase !== "BREACH");
@@ -196,6 +226,64 @@ export class App {
 
     this.sceneMgr.render();
     requestAnimationFrame((nextTimestamp) => this.loop(nextTimestamp));
+  }
+
+  private startSoloMatch(selection: PlaySelection): void {
+    this.appMode = "solo";
+    this.multiplayer.hide();
+    this.hud.setVisible(true);
+    this.killFeed.setVisible(true);
+
+    this.match.startNewGame({
+      humanName: selection.name,
+      humanTeam: 0,
+      teamSize: selection.teamSize,
+    });
+
+    if (this.mobile) {
+      this.input.setMobileControlsActive(true);
+      this.mobileControls?.show();
+    } else {
+      this.input.lockPointer(this.sceneMgr.getRenderer().domElement);
+    }
+
+    this.beginNewRound();
+  }
+
+  private async startOnlineLobby(selection: PlaySelection): Promise<void> {
+    this.appMode = "online";
+    this.projectiles.clear();
+    this.hud.setVisible(false);
+    this.killFeed.setVisible(false);
+    this.input.exitPointerLock();
+    this.mobileControls?.hide();
+    this.input.setMobileControlsActive(false);
+    this.multiplayer.showConnecting(selection.name);
+
+    try {
+      const snapshot = await this.net.connect({ name: selection.name });
+      this.multiplayer.render(snapshot);
+    } catch (error) {
+      console.error("Failed to connect to the multiplayer room.", error);
+      this.multiplayer.setStatus("Could not reach the Colyseus server. Check that the server is running.", "error");
+    }
+  }
+
+  private async returnToMenuFromOnline(): Promise<void> {
+    this.appMode = "menu";
+    this.multiplayer.hide();
+    this.hud.setVisible(false);
+    this.killFeed.setVisible(false);
+    this.mobileControls?.hide();
+    this.input.setMobileControlsActive(false);
+
+    try {
+      await this.net.disconnect();
+    } catch (error) {
+      console.warn("Multiplayer disconnect raised an error.", error);
+    }
+
+    this.menu.show();
   }
 
   private tickWeaponFire(): void {

@@ -80,4 +80,16 @@ export class RoundController {
   public isPlaying(): boolean {
     return this.phase === 'PLAYING';
   }
+
+  /**
+   * Cancel the scheduled "start next round" callback. Used when the match
+   * has ended and we want to freeze the current ROUND_END screen until the
+   * caller transitions to menu or a new match.
+   */
+  public cancelPendingRestart(): void {
+    if (this.restartHandle) {
+      clearTimeout(this.restartHandle);
+      this.restartHandle = null;
+    }
+  }
 }

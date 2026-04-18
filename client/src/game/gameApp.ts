@@ -1,4 +1,4 @@
-import { GRAB_RADIUS, PLAYER_RADIUS } from "../../../shared/constants";
+import { GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS, MATCH_END_DELAY } from "../../../shared/constants";
 import { generateArenaLayout } from "../../../shared/arena-gen";
 import type { MultiplayerRoomSnapshot } from "../../../shared/multiplayer";
 import { Arena } from "../arena/arena";
@@ -31,6 +31,8 @@ const PLAYER_UPDATE_RATE = 0.05; // 20hz
 export class App {
   private appMode: "menu" | "solo" | "online" = "menu";
   private onlineGameActive = false;
+  private matchOver = false;
+  private matchEndHandle: ReturnType<typeof setTimeout> | null = null;
   private playerUpdateTimer = 0;
   private latestOnlineSnapshot: MultiplayerRoomSnapshot | null = null;
   private previousOnlinePhase: MultiplayerRoomSnapshot["phase"] | null = null;
@@ -96,6 +98,9 @@ export class App {
           break;
         case "roundTie":
           this.onRoundTie();
+          break;
+        case "matchEnd":
+          this.onMatchEnd(event.winningTeam, event.finalScore);
           break;
       }
     };
@@ -282,11 +287,13 @@ export class App {
 
     this.tickOnlineWeaponFire();
 
+    const localCentre = this.player.getPosition().clone();
+    localCentre.y += HITBOX_OFFSET_Y;
     const localTarget = {
       active: this.player.phase !== "RESPAWNING" && !this.player.damage.frozen,
       id: "local-player",
-      pos: this.player.getPosition().clone(),
-      radius: PLAYER_RADIUS,
+      pos: localCentre,
+      radius: HITBOX_RADIUS,
       team: this.player.team,
     };
     const allTargets = [localTarget, ...this.onlineMatch.getProjectileTargets()];
@@ -337,19 +344,21 @@ export class App {
           hit.impactPoint,
           this.player.getPosition(),
           this.cam.getForward(),
+          HITBOX_OFFSET_Y,
+          HITBOX_RADIUS,
         );
-        this.player.applyHit(zone, hit.direction.clone().normalize().multiplyScalar(3));
+        // Zero impulse — shots freeze but do not push. See localMatch.ts.
+        this.player.applyHit(zone, hit.direction.clone().normalize().multiplyScalar(0));
       }
       return;
     }
 
     if (hit.ownerId === "local-player") {
-      const impulse = hit.direction.clone().normalize().multiplyScalar(3);
       this.net.sendHitReport({
         targetId: hit.targetId,
-        impX: impulse.x,
-        impY: impulse.y,
-        impZ: impulse.z,
+        impX: 0,
+        impY: 0,
+        impZ: 0,
       });
       this.hud.triggerHitConfirm(this.player.team);
     }
@@ -455,7 +464,6 @@ export class App {
     if (this.player.phase === "BREACH" && !this.arena.isGoalDoorOpen(this.player.currentBreachTeam)) {
       nearBar = false;
     }
-    const inBreach = this.arena.isInBreachRoom(this.player.getPosition(), this.player.team);
 
     if (this.mobile && this.mobileControls) {
       const canGrab = !this.player.damage.leftArm && !this.player.damage.frozen;
@@ -478,7 +486,6 @@ export class App {
       launchPower: this.player.launchPower,
       maxLaunchPower: this.player.maxLaunchPower(),
       nearBar,
-      inBreach,
       damage: this.player.damage,
       tabHeld: this.input.isTabHeld(),
       ownTeam: rosters.ownTeam,
@@ -498,7 +505,6 @@ export class App {
     if (this.player.phase === "BREACH" && !this.arena.isGoalDoorOpen(this.player.currentBreachTeam)) {
       nearBar = false;
     }
-    const inBreach = this.arena.isInBreachRoom(this.player.getPosition(), this.player.team);
 
     if (this.mobile && this.mobileControls) {
       const canGrab = !this.player.damage.leftArm && !this.player.damage.frozen;
@@ -529,7 +535,6 @@ export class App {
       launchPower: this.player.launchPower,
       maxLaunchPower: this.player.maxLaunchPower(),
       nearBar,
-      inBreach,
       damage: this.player.damage,
       tabHeld: this.input.isTabHeld(),
       ownTeam: rosters.ownTeam,
@@ -571,10 +576,48 @@ export class App {
     this.round.endRound();
   }
 
+  private onMatchEnd(
+    winningTeam: 0 | 1,
+    finalScore: { team0: number; team1: number },
+  ): void {
+    // onRoundWin already ran and scheduled the next round via round.endRound();
+    // override that so we show the match result and go back to menu instead.
+    this.matchOver = true;
+    this.round.cancelPendingRestart();
+    const label = winningTeam === 0 ? "CYAN" : "MAGENTA";
+    this.hud.showRoundEnd(
+      `${label} WINS THE MATCH  ${finalScore.team0} - ${finalScore.team1}`,
+    );
+    if (this.matchEndHandle) clearTimeout(this.matchEndHandle);
+    this.matchEndHandle = setTimeout(() => {
+      this.matchEndHandle = null;
+      this.returnToMenuFromSolo();
+    }, MATCH_END_DELAY * 1000);
+  }
+
+  private returnToMenuFromSolo(): void {
+    this.appMode = "menu";
+    this.matchOver = false;
+    this.projectiles.clear();
+    this.hud.setVisible(false);
+    this.hud.hideRoundEnd();
+    this.killFeed.setVisible(false);
+    this.input.exitPointerLock();
+    this.mobileControls?.hide();
+    this.input.setMobileControlsActive(false);
+    this.match.dispose();
+    this.menu.show();
+  }
+
   // ── Solo match start ────────────────────────────────────────────────────────
 
   private startSoloMatch(selection: PlaySelection): void {
     this.appMode = "solo";
+    this.matchOver = false;
+    if (this.matchEndHandle) {
+      clearTimeout(this.matchEndHandle);
+      this.matchEndHandle = null;
+    }
     this.multiplayer.hide();
     this.hud.setVisible(true);
     this.killFeed.setVisible(true);
@@ -775,5 +818,14 @@ export class App {
       roundActive && playerAlive && (this.thirdPerson || isSelfie),
     );
     this.gun.setVisible(roundActive && playerAlive && !this.thirdPerson && !isSelfie);
+
+    // When the local player is frozen or their right arm is disabled,
+    // tint the pistol with the enemy team's colour so the player sees
+    // they were hit instead of guessing why shots no longer fire.
+    const incapacitated = this.player.damage.frozen || this.player.damage.rightArm;
+    const enemyColor = this.player.team === 0 ? 0xff00ff : 0x00ffff;
+    const tint = incapacitated ? enemyColor : null;
+    this.gun.setFrozenTint(tint);
+    this.player.setThirdPersonGunFrozenTint(tint);
   }
 }

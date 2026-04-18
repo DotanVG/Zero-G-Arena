@@ -26,11 +26,13 @@ export function classifyHitZone(
   impactPoint: Vec3Like,
   playerPos: Vec3Like,
   playerFacing: Vec3Like,
+  hitOffsetY = 0,
+  hitRadius = PLAYER_RADIUS,
 ): HitZone {
   const localX = impactPoint.x - playerPos.x;
-  const localY = impactPoint.y - playerPos.y;
+  const localY = impactPoint.y - playerPos.y - hitOffsetY;
   const localZ = impactPoint.z - playerPos.z;
-  const yRel = localY / PLAYER_RADIUS;
+  const yRel = localY / hitRadius;
 
   if (yRel > 0.55) {
     return 'head';
@@ -44,8 +46,9 @@ export function classifyHitZone(
     const nx = rx * invLen;
     const nz = rz * invLen;
     const xProj = localX * nx + localZ * nz;
-    if (xProj > 0.4) return 'rightArm';
-    if (xProj < -0.4) return 'leftArm';
+    const armThreshold = hitRadius * 0.55;
+    if (xProj > armThreshold) return 'rightArm';
+    if (xProj < -armThreshold) return 'leftArm';
     return 'body';
   }
   return 'legs';

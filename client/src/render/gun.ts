@@ -23,6 +23,9 @@ export class GunViewModel {
   private root: THREE.Group | null = null;
   private _visible = true;
   private muzzleLocal: THREE.Vector3 | null = null;
+  private tintMaterials: THREE.MeshStandardMaterial[] = [];
+  private tintOriginal: { emissive: THREE.Color; intensity: number }[] = [];
+  private pendingTint: number | null = null;
 
   public constructor(camera: THREE.PerspectiveCamera) {
     const loader = new GLTFLoader();
@@ -35,20 +38,34 @@ export class GunViewModel {
         this.root.rotation.copy(GUN_ROTATION);
         this.muzzleLocal = this.computeMuzzleLocal(this.root);
 
-        // Render on top of everything — never clip into walls
+        // Render on top of everything — never clip into walls. Clone
+        // materials so the frozen tint on this instance doesn't leak
+        // into any other gun that happens to share the source material.
         this.root.traverse((obj) => {
           if (!(obj instanceof THREE.Mesh)) return;
           obj.renderOrder = 999;
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          for (const m of mats) {
+          const src = Array.isArray(obj.material) ? obj.material : [obj.material];
+          const cloned = src.map((m) => m.clone());
+          obj.material = Array.isArray(obj.material) ? cloned : cloned[0];
+          for (const m of cloned) {
             m.depthTest = false;
             m.depthWrite = true;
             m.transparent = true;
+            if (m instanceof THREE.MeshStandardMaterial) {
+              this.tintMaterials.push(m);
+              this.tintOriginal.push({
+                emissive: m.emissive.clone(),
+                intensity: m.emissiveIntensity,
+              });
+            }
           }
         });
 
         this.root.visible = this._visible;
         camera.add(this.root);
+        if (this.pendingTint !== null) {
+          this.applyTint(this.pendingTint);
+        }
       },
       undefined,
       (err) => console.error('[GunViewModel] failed to load Ray Gun.glb:', err),
@@ -59,6 +76,38 @@ export class GunViewModel {
   public setVisible(visible: boolean): void {
     this._visible = visible;
     if (this.root) this.root.visible = visible;
+  }
+
+  /**
+   * Tint the pistol with an enemy-team glow when the local player is
+   * incapacitated. Pass `null` to clear the tint. Keeping the model
+   * visible (rather than hiding it) gives the player clear visual
+   * feedback that they've been hit.
+   */
+  public setFrozenTint(color: number | null): void {
+    if (!this.root) {
+      this.pendingTint = color;
+      return;
+    }
+    this.applyTint(color);
+  }
+
+  private applyTint(color: number | null): void {
+    if (color === null) {
+      for (let i = 0; i < this.tintMaterials.length; i++) {
+        const m = this.tintMaterials[i];
+        const orig = this.tintOriginal[i];
+        m.emissive.copy(orig.emissive);
+        m.emissiveIntensity = orig.intensity;
+        m.needsUpdate = true;
+      }
+      return;
+    }
+    for (const m of this.tintMaterials) {
+      m.emissive.setHex(color);
+      m.emissiveIntensity = 1.3;
+      m.needsUpdate = true;
+    }
   }
 
   public getMuzzleWorldPosition(): THREE.Vector3 | null {

@@ -7,7 +7,12 @@ import {
   resolveActorCollisions,
   spawnPosition,
 } from "../shared/player-logic";
-import { MAX_LAUNCH_SPEED, LEGS_HIT_LAUNCH_FACTOR } from "../shared/constants";
+import {
+  HITBOX_OFFSET_Y,
+  HITBOX_RADIUS,
+  LEGS_HIT_LAUNCH_FACTOR,
+  MAX_LAUNCH_SPEED,
+} from "../shared/constants";
 
 describe("classifyHitZone", () => {
   const playerPos = { x: 0, y: 0, z: 0 };
@@ -20,6 +25,46 @@ describe("classifyHitZone", () => {
 
   it("classifies right arm hits relative to facing", () => {
     expect(classifyHitZone({ x: 0.5, y: 0.1, z: 0 }, playerPos, facing)).toBe("rightArm");
+  });
+
+  it("keeps zone variety when using a tight hit sphere via hitRadius", () => {
+    // Tight hit sphere: centre at y = HITBOX_OFFSET_Y, radius = HITBOX_RADIUS.
+    // Thresholds scale with hitRadius so head/body/arm/legs stay reachable
+    // even though the sphere is much smaller than PLAYER_RADIUS.
+    const top = HITBOX_OFFSET_Y + HITBOX_RADIUS;
+    const bottom = HITBOX_OFFSET_Y - HITBOX_RADIUS;
+    expect(
+      classifyHitZone({ x: 0, y: top, z: 0 }, playerPos, facing, HITBOX_OFFSET_Y, HITBOX_RADIUS),
+    ).toBe("head");
+    expect(
+      classifyHitZone({ x: 0, y: HITBOX_OFFSET_Y, z: 0 }, playerPos, facing, HITBOX_OFFSET_Y, HITBOX_RADIUS),
+    ).toBe("body");
+    expect(
+      classifyHitZone({ x: 0, y: bottom, z: 0 }, playerPos, facing, HITBOX_OFFSET_Y, HITBOX_RADIUS),
+    ).toBe("legs");
+    expect(
+      classifyHitZone(
+        { x: HITBOX_RADIUS * 0.8, y: HITBOX_OFFSET_Y, z: 0 },
+        playerPos,
+        facing,
+        HITBOX_OFFSET_Y,
+        HITBOX_RADIUS,
+      ),
+    ).toBe("rightArm");
+  });
+
+  it("hitOffsetY shifts the classification origin so a hit on the alien torso reads as body", () => {
+    // With offset -0.35, a shot that lands 0.35 below physics centre
+    // is at the sphere centre → y_rel ≈ 0 → body.
+    expect(
+      classifyHitZone({ x: 0, y: -0.35, z: 0 }, playerPos, facing, -0.35),
+    ).toBe("body");
+    // A shot that lands on the old "head" yRel > 0.55 but without the
+    // offset would still be head; with the offset it becomes even
+    // further above the sphere and still classifies as head.
+    expect(
+      classifyHitZone({ x: 0, y: 0.2, z: 0 }, playerPos, facing, -0.35),
+    ).toBe("head");
   });
 });
 

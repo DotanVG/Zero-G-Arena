@@ -16,7 +16,6 @@ export interface HudState {
   launchPower: number;
   maxLaunchPower: number;
   nearBar: boolean;
-  inBreach: boolean;
   damage: DamageState;
   tabHeld: boolean;
   ownTeam: FullPlayerInfo[];
@@ -71,7 +70,6 @@ export class HUD {
     this.renderCountdown(state.phase, state.countdown);
     this.renderObjectiveTypewriter(state.phase, state.dt, state.team);
     this.renderCrosshair(state.dt);
-    this.renderBreachIndicator(state.inBreach);
     this.renderGrabPrompt(state.playerPhase, state.nearBar, state.damage);
     this.renderPowerBar(state.playerPhase, state.launchPower, state.maxLaunchPower);
     this.renderDamage(state.damage);
@@ -156,10 +154,6 @@ export class HUD {
     } else {
       el.style.display = 'none';
     }
-  }
-
-  private renderBreachIndicator(inBreach: boolean): void {
-    this.view.breach.style.display = inBreach ? 'block' : 'none';
   }
 
   private renderGrabPrompt(

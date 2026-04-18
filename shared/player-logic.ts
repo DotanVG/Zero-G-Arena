@@ -53,17 +53,23 @@ export function classifyHitZone(
   impactPoint: Vec3,
   playerPos: Vec3,
   playerFacing: Vec3,
+  hitOffsetY = 0,
+  hitRadius = PLAYER_RADIUS,
 ): HitZone {
   const local = v3.sub(impactPoint, playerPos);
-  const yRel = local.y / PLAYER_RADIUS;
+  // Shift so the hit sphere's centre is y=0, not the physics anchor,
+  // then scale by the sphere's own radius so zone thresholds reach
+  // regardless of how tight the hit geometry is.
+  const yRel = (local.y - hitOffsetY) / hitRadius;
 
   if (yRel > 0.55) return "head";
   if (yRel > -0.2) {
     const worldUp = { x: 0, y: 1, z: 0 };
     const right = v3.normalize(v3.cross(playerFacing, worldUp));
     const xProj = v3.dot(local, right);
-    if (xProj > 0.4) return "rightArm";
-    if (xProj < -0.4) return "leftArm";
+    const armThreshold = hitRadius * 0.55;
+    if (xProj > armThreshold) return "rightArm";
+    if (xProj < -armThreshold) return "leftArm";
     return "body";
   }
   return "legs";

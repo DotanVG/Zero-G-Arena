@@ -105,12 +105,15 @@ npm test
 | Zero-G movement, grab, and launch | Done |
 | Breach rooms and portal doors | Done |
 | Freeze pistol and damage zones | Done |
-| Main menu | Done |
+| Main menu (Enter to start, bold-neon call-sign labels) | Done |
 | Local solo bot matches | Done |
 | Match size selector (`1v1`, `5v5`, `10v10`, `20v20`) | Done |
+| Solo match ends at first team to 5 round wins | Done |
+| Projectile hits freeze without impulse; tighter hitboxes | Done |
+| 1st-person pistol hidden when frozen | Done |
 | Local bot rendering and scoreboards | Done |
 | WebSocket multiplayer transport | Placeholder |
-| Colyseus lobby multiplayer | Planned |
+| Colyseus lobby multiplayer | In progress (staging) |
 
 ---
 

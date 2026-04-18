@@ -55,6 +55,14 @@ export class MainMenu {
       const selection = this.saveSelection();
       this.fadeOut(() => this.onPlayOnline?.(selection));
     });
+
+    // Enter anywhere in the menu triggers PLAY SOLO (quickest path).
+    // Using the root container so it also fires while the name input is focused.
+    elements.root.addEventListener('keydown', (ev: KeyboardEvent) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      elements.playSoloButton.click();
+    });
   }
 
   public hide(): void {

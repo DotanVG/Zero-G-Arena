@@ -509,8 +509,10 @@ export class LocalPlayer {
     impactPoint: THREE.Vector3,
     playerPos: THREE.Vector3,
     playerFacing: THREE.Vector3,
+    hitOffsetY = 0,
+    hitRadius?: number,
   ): HitZone {
-    return classifyHitZone(impactPoint, playerPos, playerFacing);
+    return classifyHitZone(impactPoint, playerPos, playerFacing, hitOffsetY, hitRadius);
   }
 
   public resetForNewRound(arena: Arena, spawnOverride?: { x: number; y: number; z: number }): void {
@@ -548,6 +550,10 @@ export class LocalPlayer {
 
   public setThirdPersonGunVisible(visible: boolean): void {
     this.gun.setVisible(visible);
+  }
+
+  public setThirdPersonGunFrozenTint(color: number | null): void {
+    this.gun.setFrozenTint(color);
   }
 
   public getThirdPersonGunMuzzleWorldPosition(): THREE.Vector3 | null {

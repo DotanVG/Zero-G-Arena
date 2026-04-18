@@ -502,17 +502,10 @@ export class LocalPlayer {
     switch (zone) {
       case 'head':
       case 'body':
-        if (!this.damage.frozen) {
-          this.damage.frozen = true;
-          this.deaths++;
-        }
-        this.phase = 'FROZEN';
-        this.grabbedBarPos = null;
-        this.grabHandGripLocal = null;
-        this.grabPoseLocked = false;
-        return true;
+        return this.promoteToFullFreeze();
       case 'rightArm':
         this.damage.rightArm = true;
+        if (this.allLimbsDamaged()) return this.promoteToFullFreeze();
         return false;
       case 'leftArm':
         this.damage.leftArm = true;
@@ -522,16 +515,35 @@ export class LocalPlayer {
           this.grabHandGripLocal = null;
           this.grabPoseLocked = false;
         }
+        if (this.allLimbsDamaged()) return this.promoteToFullFreeze();
         return false;
       case 'leftLeg':
         this.damage.leftLeg = true;
         this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
+        if (this.allLimbsDamaged()) return this.promoteToFullFreeze();
         return false;
       case 'rightLeg':
         this.damage.rightLeg = true;
         this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
+        if (this.allLimbsDamaged()) return this.promoteToFullFreeze();
         return false;
     }
+  }
+
+  private allLimbsDamaged(): boolean {
+    return this.damage.leftArm && this.damage.rightArm && this.damage.leftLeg && this.damage.rightLeg;
+  }
+
+  private promoteToFullFreeze(): true {
+    if (!this.damage.frozen) {
+      this.damage.frozen = true;
+      this.deaths++;
+    }
+    this.phase = 'FROZEN';
+    this.grabbedBarPos = null;
+    this.grabHandGripLocal = null;
+    this.grabPoseLocked = false;
+    return true;
   }
 
   public static classifyHitZone(

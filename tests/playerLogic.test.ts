@@ -111,6 +111,39 @@ describe("applyHit", () => {
     expect(state.grabbedBarPos).toBeNull();
     expect(state.deaths).toBe(1);
   });
+
+  it("promotes to full freeze when the 4th limb is damaged", () => {
+    const state = {
+      damage: { frozen: false, leftArm: true, rightArm: true, leftLeg: true, rightLeg: false },
+      deaths: 0,
+      grabbedBarPos: null,
+      launchPower: 0,
+      phase: "FLOATING" as const,
+      vel: { x: 0, y: 0, z: 0 },
+    };
+
+    const killed = applyHit(state, "rightLeg", { x: 0, y: 0, z: 0 });
+    expect(killed).toBe(true);
+    expect(state.damage.frozen).toBe(true);
+    expect(state.phase).toBe("FROZEN");
+    expect(state.deaths).toBe(1);
+  });
+
+  it("does not freeze on 3 limbs damaged", () => {
+    const state = {
+      damage: { frozen: false, leftArm: true, rightArm: true, leftLeg: false, rightLeg: false },
+      deaths: 0,
+      grabbedBarPos: null,
+      launchPower: 0,
+      phase: "FLOATING" as const,
+      vel: { x: 0, y: 0, z: 0 },
+    };
+
+    const killed = applyHit(state, "leftLeg", { x: 0, y: 0, z: 0 });
+    expect(killed).toBe(false);
+    expect(state.damage.frozen).toBe(false);
+    expect(state.phase).toBe("FLOATING");
+  });
 });
 
 describe("spawnPosition", () => {

@@ -88,6 +88,10 @@ export function maxLaunchPower(damage: DamageState): number {
   return MAX_LAUNCH_SPEED;
 }
 
+export function allLimbsDamaged(damage: DamageState): boolean {
+  return damage.leftArm && damage.rightArm && damage.leftLeg && damage.rightLeg;
+}
+
 export function applyHit(
   state: SharedPlayerState,
   zone: HitZone,
@@ -98,15 +102,10 @@ export function applyHit(
   switch (zone) {
     case "head":
     case "body":
-      if (!state.damage.frozen) {
-        state.damage.frozen = true;
-        state.deaths += 1;
-      }
-      state.phase = "FROZEN";
-      state.grabbedBarPos = null;
-      return true;
+      return promoteToFullFreeze(state);
     case "rightArm":
       state.damage.rightArm = true;
+      if (allLimbsDamaged(state.damage)) return promoteToFullFreeze(state);
       return false;
     case "leftArm":
       state.damage.leftArm = true;
@@ -114,16 +113,29 @@ export function applyHit(
         state.phase = "FLOATING";
         state.grabbedBarPos = null;
       }
+      if (allLimbsDamaged(state.damage)) return promoteToFullFreeze(state);
       return false;
     case "leftLeg":
       state.damage.leftLeg = true;
       state.launchPower = Math.min(state.launchPower, maxLaunchPower(state.damage));
+      if (allLimbsDamaged(state.damage)) return promoteToFullFreeze(state);
       return false;
     case "rightLeg":
       state.damage.rightLeg = true;
       state.launchPower = Math.min(state.launchPower, maxLaunchPower(state.damage));
+      if (allLimbsDamaged(state.damage)) return promoteToFullFreeze(state);
       return false;
   }
+}
+
+function promoteToFullFreeze(state: SharedPlayerState): true {
+  if (!state.damage.frozen) {
+    state.damage.frozen = true;
+    state.deaths += 1;
+  }
+  state.phase = "FROZEN";
+  state.grabbedBarPos = null;
+  return true;
 }
 
 export function spawnPosition(

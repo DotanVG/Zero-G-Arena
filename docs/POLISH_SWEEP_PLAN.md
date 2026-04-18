@@ -36,6 +36,8 @@ Gameplay bugs that survived Group A. All should be testable in solo with bots.
 - [x] **Animation freeze on frozen model.** Local + simulated avatars tick the mixer with `dt=0` after the death-animation crossfade settles, so the alien holds the death pose instead of looping it.
 - [x] **Bot-collision momentum preservation.** `resolveActorCollisions` now takes optional `vel` per body and cancels only the approach-velocity component, preserving tangential momentum. Human + bot velocities are wired through.
 - [x] **Split legs into left/right with graduated launch cap.** `DamageState` replaces `legs` with `leftLeg` + `rightLeg`. `classifyHitZone` projects the impact onto the facing-right vector to pick left vs right leg. `maxLaunchPower` returns `MAX_LAUNCH_SPEED * 1.0 / 0.75 / 0.5` for 0 / 1 / 2 damaged legs. HUD power bar now uses `MAX_LAUNCH_SPEED` as its 100% mark so the cap shows as incomplete fill and a "(CAP 75%)" label.
+- [x] **Glow cleanup when fully frozen.** Limb glows (leftArm / rightArm / leftLeg / rightLeg) are suppressed while `damage.frozen` is true — only the full-body freeze glow renders for a frozen player.
+- [x] **All-limbs-damaged promotes to full freeze.** Once all 4 limbs are hit, `applyHit` transitions the player to `FROZEN`, increments `deaths`, and returns `true` so the kill-feed + full-freeze-win checks fire just like a head/body hit.
 
 Acceptance: `tsc` clean, `npm test` green, manual golden path + each bullet verified in browser.
 

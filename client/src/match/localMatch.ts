@@ -764,15 +764,10 @@ function applyHitToBot(
   switch (zone) {
     case "head":
     case "body":
-      if (!bot.damage.frozen) {
-        bot.damage.frozen = true;
-        bot.deaths += 1;
-      }
-      bot.phase = "FROZEN";
-      bot.grabbedBarPos = null;
-      return true;
+      return promoteBotToFullFreeze(bot);
     case "rightArm":
       bot.damage.rightArm = true;
+      if (allBotLimbsDamaged(bot)) return promoteBotToFullFreeze(bot);
       return false;
     case "leftArm":
       bot.damage.leftArm = true;
@@ -780,16 +775,33 @@ function applyHitToBot(
         bot.phase = "FLOATING";
         bot.grabbedBarPos = null;
       }
+      if (allBotLimbsDamaged(bot)) return promoteBotToFullFreeze(bot);
       return false;
     case "leftLeg":
       bot.damage.leftLeg = true;
       bot.launchPower = Math.min(bot.launchPower, maxLaunchPower(bot.damage));
+      if (allBotLimbsDamaged(bot)) return promoteBotToFullFreeze(bot);
       return false;
     case "rightLeg":
       bot.damage.rightLeg = true;
       bot.launchPower = Math.min(bot.launchPower, maxLaunchPower(bot.damage));
+      if (allBotLimbsDamaged(bot)) return promoteBotToFullFreeze(bot);
       return false;
   }
+}
+
+function allBotLimbsDamaged(bot: BotState): boolean {
+  return bot.damage.leftArm && bot.damage.rightArm && bot.damage.leftLeg && bot.damage.rightLeg;
+}
+
+function promoteBotToFullFreeze(bot: BotState): true {
+  if (!bot.damage.frozen) {
+    bot.damage.frozen = true;
+    bot.deaths += 1;
+  }
+  bot.phase = "FROZEN";
+  bot.grabbedBarPos = null;
+  return true;
 }
 
 function integrateFloating(bot: BotState, arena: Arena, dt = 0): void {

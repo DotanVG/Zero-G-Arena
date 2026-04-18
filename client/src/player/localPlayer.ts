@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import {
-  MAX_LAUNCH_SPEED,
-  LEGS_HIT_LAUNCH_FACTOR,
-  LAUNCH_AIM_SENSITIVITY,
+  BOTH_LEGS_HIT_LAUNCH_FACTOR,
   GRAB_RADIUS,
+  LAUNCH_AIM_SENSITIVITY,
+  MAX_LAUNCH_SPEED,
+  ONE_LEG_HIT_LAUNCH_FACTOR,
   PLAYER_RADIUS,
 } from '../../../shared/constants';
 import { clamp } from '../util/math';
@@ -73,7 +74,8 @@ export class LocalPlayer {
     frozen: false,
     rightArm: false,
     leftArm: false,
-    legs: false,
+    leftLeg: false,
+    rightLeg: false,
   };
 
   public launchPower = 0;
@@ -140,9 +142,10 @@ export class LocalPlayer {
   }
 
   public maxLaunchPower(): number {
-    return this.damage.legs
-      ? MAX_LAUNCH_SPEED * LEGS_HIT_LAUNCH_FACTOR
-      : MAX_LAUNCH_SPEED;
+    const legsHit = (this.damage.leftLeg ? 1 : 0) + (this.damage.rightLeg ? 1 : 0);
+    if (legsHit === 2) return MAX_LAUNCH_SPEED * BOTH_LEGS_HIT_LAUNCH_FACTOR;
+    if (legsHit === 1) return MAX_LAUNCH_SPEED * ONE_LEG_HIT_LAUNCH_FACTOR;
+    return MAX_LAUNCH_SPEED;
   }
 
   public update(
@@ -183,21 +186,12 @@ export class LocalPlayer {
 
   private updateFrozen(arena: Arena, dt: number): void {
     this.breachJumpAnimationActive = false;
-    // Only the own-team portal is passable while frozen, so a dead ally can
-    // drift home and unfreeze but cannot cross into the enemy room.
-    const goalAxis = arena.getBreachOpenAxis(this.team);
-    const perpAxis: 'x' | 'z' = goalAxis === 'z' ? 'x' : 'z';
-    const ownFaceSign = (-arena.getBreachOpenSign(this.team)) as 1 | -1;
-    const ownDoorOpen = arena.isGoalDoorOpen(this.team);
-    const portalFacesOpen = {
-      positive: ownFaceSign === 1 && ownDoorOpen,
-      negative: ownFaceSign === -1 && ownDoorOpen,
-    };
-
+    // Frozen bodies bounce off every arena wall — fully-frozen players cannot
+    // breach. Limb-damaged (but not frozen) allies unfreeze their limbs by
+    // drifting home via the FLOATING branch of updateFloating.
     integrateZeroG(this.phys, dt);
-    bounceArena(this.phys, goalAxis, perpAxis, portalFacesOpen);
+    bounceArena(this.phys);
     arena.bounceObstacles(this.phys);
-    this.tryReturnToOwnBreach(arena);
   }
 
   private updateBreach(
@@ -362,9 +356,15 @@ export class LocalPlayer {
   }
 
   private returnToOwnBreach(): void {
+    // Fully-frozen players cannot reach here — FROZEN drift bounces off
+    // every wall, so damage.frozen stays untouched. Allies who are still
+    // FLOATING but wounded can drift home to heal their limb damage.
     this.currentBreachTeam = this.team;
     this.phase = 'BREACH';
-    this.damage.frozen = false;
+    this.damage.leftArm = false;
+    this.damage.rightArm = false;
+    this.damage.leftLeg = false;
+    this.damage.rightLeg = false;
     this.phys.vel.y = 0;
   }
 
@@ -523,8 +523,12 @@ export class LocalPlayer {
           this.grabPoseLocked = false;
         }
         return false;
-      case 'legs':
-        this.damage.legs = true;
+      case 'leftLeg':
+        this.damage.leftLeg = true;
+        this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
+        return false;
+      case 'rightLeg':
+        this.damage.rightLeg = true;
         this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
         return false;
     }
@@ -545,7 +549,8 @@ export class LocalPlayer {
       frozen: false,
       rightArm: false,
       leftArm: false,
-      legs: false,
+      leftLeg: false,
+      rightLeg: false,
     };
     this.launchPower = 0;
     this.grabbedBarPos = null;

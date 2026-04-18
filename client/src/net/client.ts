@@ -217,7 +217,8 @@ function toActorSnapshot(value: Record<string, unknown>): OnlineActorSnapshot {
     frozen: Boolean(value.frozen),
     leftArm: Boolean(value.leftArm),
     rightArm: Boolean(value.rightArm),
-    legs: Boolean(value.legs),
+    leftLeg: Boolean(value.leftLeg),
+    rightLeg: Boolean(value.rightLeg),
     kills: Number(value.kills ?? 0),
     deaths: Number(value.deaths ?? 0),
   };

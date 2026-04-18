@@ -20,7 +20,7 @@ export default class ServerPlayer {
   public kills = 0;
   public deaths = 0;
   public ping = 0;
-  public damage: DamageState = { frozen: false, rightArm: false, leftArm: false, legs: false };
+  public damage: DamageState = { frozen: false, rightArm: false, leftArm: false, leftLeg: false, rightLeg: false };
 
   public constructor(name: string, team: 0 | 1) {
     this.id = Math.random().toString(36).slice(2, 10);

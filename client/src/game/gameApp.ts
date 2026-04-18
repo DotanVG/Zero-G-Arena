@@ -398,7 +398,8 @@ export class App {
       frozen: this.player.damage.frozen,
       leftArm: this.player.damage.leftArm,
       rightArm: this.player.damage.rightArm,
-      legs: this.player.damage.legs,
+      leftLeg: this.player.damage.leftLeg,
+      rightLeg: this.player.damage.rightLeg,
       kills: this.player.kills,
       deaths: this.player.deaths,
     });

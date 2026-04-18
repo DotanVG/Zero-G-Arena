@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { PlayerPhase } from "../../../shared/schema";
+import type { DamageState, PlayerPhase } from "../../../shared/schema";
 import { loadAlienRenderClone } from "../player/alienRenderAsset";
 import {
   ANIM_DEATH,
@@ -53,7 +53,7 @@ export class SimulatedPlayerAvatar {
 
   public update(
     pos: THREE.Vector3,
-    damage: { frozen: boolean; leftArm: boolean; rightArm: boolean; legs: boolean },
+    damage: DamageState,
     phase: PlayerPhase,
     yaw: number,
     dt: number,

@@ -138,7 +138,8 @@ function isSlotActive(id: GlowSlotId, damage: DamageState): boolean {
     case "rightArm":
       return damage.rightArm;
     case "leftLeg":
+      return damage.leftLeg;
     case "rightLeg":
-      return damage.legs;
+      return damage.rightLeg;
   }
 }

@@ -541,9 +541,6 @@ export class LocalMatch {
   ): void {
     if (bot.phase === "FROZEN") {
       integrateFrozenDrift(bot, arena, dt);
-      if (arena.isInBreachRoom(bot.phys.pos, bot.team)) {
-        returnBotToOwnBreach(bot);
-      }
       return;
     }
 
@@ -631,9 +628,6 @@ export class LocalMatch {
         break;
       case "FROZEN":
         integrateFrozenDrift(bot, arena, dt);
-        if (arena.isInBreachRoom(bot.phys.pos, bot.team)) {
-          returnBotToOwnBreach(bot);
-        }
         break;
       case "GRABBING":
       case "AIMING":
@@ -733,8 +727,9 @@ function createDamageState(): DamageState {
   return {
     frozen: false,
     leftArm: false,
-    legs: false,
+    leftLeg: false,
     rightArm: false,
+    rightLeg: false,
   };
 }
 
@@ -786,8 +781,12 @@ function applyHitToBot(
         bot.grabbedBarPos = null;
       }
       return false;
-    case "legs":
-      bot.damage.legs = true;
+    case "leftLeg":
+      bot.damage.leftLeg = true;
+      bot.launchPower = Math.min(bot.launchPower, maxLaunchPower(bot.damage));
+      return false;
+    case "rightLeg":
+      bot.damage.rightLeg = true;
       bot.launchPower = Math.min(bot.launchPower, maxLaunchPower(bot.damage));
       return false;
   }
@@ -813,23 +812,14 @@ function integrateFloating(bot: BotState, arena: Arena, dt = 0): void {
 }
 
 /**
- * Frozen drift: zero-G + obstacle bounce. Only the OWN team's portal face
- * is passable — frozen bodies can drift back into their home breach room
- * (and unfreeze via returnBotToOwnBreach) but cannot cross into the enemy
- * room to score a breach while frozen.
+ * Frozen drift: zero-G + fully solid arena walls. Frozen bodies cannot
+ * breach — including back into their own room. Limb-damaged (but not
+ * frozen) allies get their limbs healed only by drifting home via the
+ * FLOATING branch (see integrateFloating + returnBotToOwnBreach).
  */
 function integrateFrozenDrift(bot: BotState, arena: Arena, dt = 0): void {
-  const goalAxis = arena.getBreachOpenAxis(bot.team);
-  const perpAxis: "x" | "z" = goalAxis === "z" ? "x" : "z";
-  const ownFaceSign = (-arena.getBreachOpenSign(bot.team)) as 1 | -1;
-  const ownDoorOpen = arena.isGoalDoorOpen(bot.team);
-  const portalFacesOpen = {
-    positive: ownFaceSign === 1 && ownDoorOpen,
-    negative: ownFaceSign === -1 && ownDoorOpen,
-  };
-
   integrateZeroG(bot.phys, dt);
-  bounceArena(bot.phys, goalAxis, perpAxis, portalFacesOpen);
+  bounceArena(bot.phys);
   arena.bounceObstacles(bot.phys);
 }
 
@@ -882,8 +872,13 @@ function resetBotsForRound(
 }
 
 function returnBotToOwnBreach(bot: BotState): void {
+  // Frozen bots cannot drift home — the arena walls are solid while FROZEN.
+  // A wounded-but-FLOATING bot that makes it back heals its limb damage.
   bot.currentBreachTeam = bot.team;
-  bot.damage.frozen = false;
+  bot.damage.leftArm = false;
+  bot.damage.rightArm = false;
+  bot.damage.leftLeg = false;
+  bot.damage.rightLeg = false;
   bot.phase = "BREACH";
   bot.phys.vel.y = 0;
 }

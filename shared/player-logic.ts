@@ -1,16 +1,17 @@
 import type { DamageState, PlayerPhase } from "./schema";
 import {
+  BOTH_LEGS_HIT_LAUNCH_FACTOR,
   BREACH_ROOM_D,
   BREACH_ROOM_H,
   BREACH_ROOM_W,
-  LEGS_HIT_LAUNCH_FACTOR,
   MAX_LAUNCH_SPEED,
+  ONE_LEG_HIT_LAUNCH_FACTOR,
   PLAYER_RADIUS,
 } from "./constants";
 import type { Vec3 } from "./vec3";
 import { v3 } from "./vec3";
 
-export type HitZone = "head" | "body" | "rightArm" | "leftArm" | "legs";
+export type HitZone = "head" | "body" | "rightArm" | "leftArm" | "leftLeg" | "rightLeg";
 
 export interface BarGrabPoint {
   pos: Vec3;
@@ -68,22 +69,23 @@ export function classifyHitZone(
   const yRel = (local.y - hitOffsetY) / hitRadius;
 
   if (yRel > 0.55) return "head";
+  const worldUp = { x: 0, y: 1, z: 0 };
+  const right = v3.normalize(v3.cross(playerFacing, worldUp));
+  const xProj = v3.dot(local, right);
   if (yRel > -0.2) {
-    const worldUp = { x: 0, y: 1, z: 0 };
-    const right = v3.normalize(v3.cross(playerFacing, worldUp));
-    const xProj = v3.dot(local, right);
     const armThreshold = hitRadius * 0.55;
     if (xProj > armThreshold) return "rightArm";
     if (xProj < -armThreshold) return "leftArm";
     return "body";
   }
-  return "legs";
+  return xProj >= 0 ? "rightLeg" : "leftLeg";
 }
 
 export function maxLaunchPower(damage: DamageState): number {
-  return damage.legs
-    ? MAX_LAUNCH_SPEED * LEGS_HIT_LAUNCH_FACTOR
-    : MAX_LAUNCH_SPEED;
+  const legsHit = (damage.leftLeg ? 1 : 0) + (damage.rightLeg ? 1 : 0);
+  if (legsHit === 2) return MAX_LAUNCH_SPEED * BOTH_LEGS_HIT_LAUNCH_FACTOR;
+  if (legsHit === 1) return MAX_LAUNCH_SPEED * ONE_LEG_HIT_LAUNCH_FACTOR;
+  return MAX_LAUNCH_SPEED;
 }
 
 export function applyHit(
@@ -113,8 +115,12 @@ export function applyHit(
         state.grabbedBarPos = null;
       }
       return false;
-    case "legs":
-      state.damage.legs = true;
+    case "leftLeg":
+      state.damage.leftLeg = true;
+      state.launchPower = Math.min(state.launchPower, maxLaunchPower(state.damage));
+      return false;
+    case "rightLeg":
+      state.damage.rightLeg = true;
       state.launchPower = Math.min(state.launchPower, maxLaunchPower(state.damage));
       return false;
   }

@@ -247,7 +247,8 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     actor.frozen = Boolean(message.frozen);
     actor.leftArm = Boolean(message.leftArm);
     actor.rightArm = Boolean(message.rightArm);
-    actor.legs = Boolean(message.legs);
+    actor.leftLeg = Boolean(message.leftLeg);
+    actor.rightLeg = Boolean(message.rightLeg);
     actor.kills = Math.min(MAX_KILLS, Math.max(0, Math.trunc(Number(message.kills)) || 0));
     actor.deaths = Math.min(MAX_KILLS, Math.max(0, Math.trunc(Number(message.deaths)) || 0));
   }

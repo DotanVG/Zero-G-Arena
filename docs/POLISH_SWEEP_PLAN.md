@@ -30,11 +30,12 @@ Branch: `feature/polish-sweep-b` → `staging`
 
 Gameplay bugs that survived Group A. All should be testable in solo with bots.
 
-- [x] **Own-team breach-room re-entry unfreezes the player.** Frozen drift now opens the own-team portal face only, so a dead ally can drift home and `tryReturnToOwnBreach` unfreezes them. The enemy room stays solid — no breaching while frozen.
+- [x] **Own-team breach-room re-entry heals limb damage (but not freeze).** FLOATING allies who drift home clear `leftArm / rightArm / leftLeg / rightLeg`. Fully-frozen players CANNOT breach — frozen drift is fully solid, so `damage.frozen` bodies bounce off every wall and stay stranded for the round.
 - [ ] **Movement in spawn before round starts.** *(Code path looks correct from inspection — needs in-browser repro before fix.)*
 - [x] **Frozen bots keep firing at the player.** Bot brain `fire` is now gated on `phase !== 'FROZEN' && !damage.frozen` in addition to the existing rightArm check.
 - [x] **Animation freeze on frozen model.** Local + simulated avatars tick the mixer with `dt=0` after the death-animation crossfade settles, so the alien holds the death pose instead of looping it.
 - [x] **Bot-collision momentum preservation.** `resolveActorCollisions` now takes optional `vel` per body and cancels only the approach-velocity component, preserving tangential momentum. Human + bot velocities are wired through.
+- [x] **Split legs into left/right with graduated launch cap.** `DamageState` replaces `legs` with `leftLeg` + `rightLeg`. `classifyHitZone` projects the impact onto the facing-right vector to pick left vs right leg. `maxLaunchPower` returns `MAX_LAUNCH_SPEED * 1.0 / 0.75 / 0.5` for 0 / 1 / 2 damaged legs. HUD power bar now uses `MAX_LAUNCH_SPEED` as its 100% mark so the cap shows as incomplete fill and a "(CAP 75%)" label.
 
 Acceptance: `tsc` clean, `npm test` green, manual golden path + each bullet verified in browser.
 

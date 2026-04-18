@@ -1,3 +1,4 @@
+import { MAX_LAUNCH_SPEED } from '../../../shared/constants';
 import type { DamageState, EnemyPlayerInfo, FullPlayerInfo } from '../../../shared/schema';
 import { isTouchDevice } from '../platform';
 import { createHudView, type HudElements } from './hud/hudView';
@@ -213,9 +214,16 @@ export class HUD {
     const showBar = playerPhase === 'GRABBING' || playerPhase === 'AIMING';
     this.view.powerWrap.style.display = showBar ? 'block' : 'none';
 
-    const pct = maxLaunchPower > 0 ? (launchPower / maxLaunchPower) * 100 : 0;
+    // Bar uses absolute MAX_LAUNCH_SPEED as its 100% mark so leg damage shows
+    // as a cap the player can *see* — the charge refuses to climb past the
+    // wounded-leg fraction even though the bar is still scaled to full power.
+    const denominator = MAX_LAUNCH_SPEED > 0 ? MAX_LAUNCH_SPEED : 1;
+    const pct = (launchPower / denominator) * 100;
+    const capPct = (maxLaunchPower / denominator) * 100;
     this.view.powerBar.style.width = `${pct.toFixed(1)}%`;
-    this.view.powerLabel.textContent = `POWER  ${Math.round(pct)}%`;
+    this.view.powerLabel.textContent = capPct < 99.9
+      ? `POWER  ${Math.round(pct)}% (CAP ${Math.round(capPct)}%)`
+      : `POWER  ${Math.round(pct)}%`;
     const hue = 120 - pct * 1.2;
     this.view.powerBar.style.background = `hsl(${hue},90%,55%)`;
   }
@@ -225,7 +233,13 @@ export class HUD {
     if (damage.frozen) parts.push('FROZEN');
     if (damage.leftArm) parts.push('LEFT ARM - NO GRAB');
     if (damage.rightArm) parts.push('RIGHT ARM - NO FIRE');
-    if (damage.legs) parts.push('LEGS - REDUCED POWER');
+    if (damage.leftLeg && damage.rightLeg) {
+      parts.push('BOTH LEGS - 50% LAUNCH');
+    } else if (damage.leftLeg) {
+      parts.push('LEFT LEG - 75% LAUNCH');
+    } else if (damage.rightLeg) {
+      parts.push('RIGHT LEG - 75% LAUNCH');
+    }
     this.view.damage.innerHTML = parts.join('<br>');
   }
 

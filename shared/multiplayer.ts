@@ -22,6 +22,24 @@ export interface LobbyMemberSnapshot {
   isBot: boolean;
 }
 
+export interface OnlineActorSnapshot {
+  id: string;
+  name: string;
+  team: 0 | 1;
+  isBot: boolean;
+  posX: number;
+  posY: number;
+  posZ: number;
+  yaw: number;
+  phase: string;
+  frozen: boolean;
+  leftArm: boolean;
+  rightArm: boolean;
+  legs: boolean;
+  kills: number;
+  deaths: number;
+}
+
 export interface MultiplayerRoomSnapshot {
   roomId: string;
   sessionId: string;
@@ -36,6 +54,50 @@ export interface MultiplayerRoomSnapshot {
   roundNumber: number;
   teamSize: MatchTeamSize;
   members: LobbyMemberSnapshot[];
+  actors: OnlineActorSnapshot[];
+}
+
+export interface PlayerUpdateMessage {
+  posX: number;
+  posY: number;
+  posZ: number;
+  velX: number;
+  velY: number;
+  velZ: number;
+  yaw: number;
+  phase: string;
+  frozen: boolean;
+  leftArm: boolean;
+  rightArm: boolean;
+  legs: boolean;
+  kills: number;
+  deaths: number;
+}
+
+export interface HitReportMessage {
+  targetId: string;
+  impX: number;
+  impY: number;
+  impZ: number;
+}
+
+export interface BreachReportMessage {
+  scorerTeam: 0 | 1;
+  scorerName: string;
+}
+
+export interface FreezeEventMessage {
+  targetId: string;
+  killerName: string;
+  killerTeam: 0 | 1;
+  victimName: string;
+  victimTeam: 0 | 1;
+}
+
+export interface RoundWinEventMessage {
+  winningTeam: 0 | 1;
+  reason: "breach" | "fullFreeze";
+  scorerName: string;
 }
 
 export interface SetReadyMessage {

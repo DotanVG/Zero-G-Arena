@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS: SessionSettings = {
 };
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
   .ob-session-launcher {
     position: fixed;
@@ -44,7 +44,7 @@ const CSS = `
     box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
     color: #effcff;
     cursor: pointer;
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.16em;
@@ -71,7 +71,7 @@ const CSS = `
       radial-gradient(circle at top, rgba(16, 36, 54, 0.74), rgba(3, 8, 14, 0.92) 56%, rgba(2, 4, 7, 0.98)),
       linear-gradient(180deg, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.6));
     color: #effcff;
-    font-family: "Oxanium", sans-serif;
+    font-family: "Cormorant Garamond", serif;
   }
 
   .ob-session-root * {
@@ -83,7 +83,7 @@ const CSS = `
     max-height: calc(100vh - 36px);
     overflow: auto;
     border-radius: 28px;
-    border: 1px solid rgba(127, 252, 255, 0.18);
+    border: 1px solid rgba(210, 220, 240, 0.16);
     background:
       radial-gradient(circle at top left, rgba(127, 252, 255, 0.1), rgba(127, 252, 255, 0) 26%),
       radial-gradient(circle at bottom right, rgba(255, 125, 248, 0.1), rgba(255, 125, 248, 0) 28%),
@@ -109,7 +109,7 @@ const CSS = `
   .ob-session-value,
   .ob-session-note,
   .ob-session-toggle-copy {
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     text-transform: uppercase;
   }
 

@@ -9,15 +9,15 @@ const CYAN = "#7ffcff";
 const MAGENTA = "#ff7df8";
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
   .ob-mp-root {
-    --mp-cyan: #7ffcff;
-    --mp-magenta: #ff7df8;
-    --mp-panel: rgba(6, 11, 18, 0.82);
-    --mp-panel-strong: rgba(4, 9, 14, 0.92);
-    --mp-border: rgba(127, 252, 255, 0.16);
-    --mp-muted: #8ea8ba;
+    --mp-cyan: oklch(0.82 0.15 210);
+    --mp-magenta: oklch(0.72 0.25 330);
+    --mp-panel: rgba(7, 10, 18, 0.82);
+    --mp-panel-strong: rgba(7, 10, 18, 0.94);
+    --mp-border: rgba(210, 220, 240, 0.16);
+    --mp-muted: #9aa5b8;
     position: fixed;
     inset: 0;
     display: none;
@@ -28,8 +28,8 @@ const CSS = `
       radial-gradient(circle at top, rgba(18, 41, 64, 0.82), rgba(4, 8, 18, 0.94) 55%, rgba(0, 0, 0, 0.98)),
       linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.44));
     z-index: 350;
-    color: #ebfbff;
-    font-family: "Oxanium", sans-serif;
+    color: #e8ecf4;
+    font-family: "Cormorant Garamond", serif;
   }
 
   .ob-mp-root * {
@@ -80,7 +80,7 @@ const CSS = `
   .ob-mp-button,
   .ob-mp-select,
   .ob-mp-empty {
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     text-transform: uppercase;
   }
 
@@ -327,7 +327,7 @@ const CSS = `
   }
 
   .ob-mp-team-count {
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 11px;
     color: var(--mp-muted);
     letter-spacing: 0.12em;

@@ -1,9 +1,11 @@
 export const ARENA_SIZE             = 40;
 export const PLAYER_RADIUS          = 0.8;
-// Projectile hit test radius — tighter than PLAYER_RADIUS so shots only
-// register on roughly the alien's silhouette, not the spherical collision
-// envelope used to keep actors from clipping through each other.
-export const HITBOX_RADIUS          = 0.55;
+// Projectile hit test radius — tight to the alien's torso/head silhouette.
+// The hit sphere is also shifted down by HITBOX_OFFSET_Y so it sits on the
+// alien body rather than centered on the physics anchor (which is near the
+// top of the head).
+export const HITBOX_RADIUS          = 0.42;
+export const HITBOX_OFFSET_Y        = -0.35;
 export const TICK_RATE              = 20;
 export const FREEZE_TIME            = 2.0;    // kept for server compat
 export const RESPAWN_TIME           = 2.0;

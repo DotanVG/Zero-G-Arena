@@ -26,9 +26,10 @@ export function classifyHitZone(
   impactPoint: Vec3Like,
   playerPos: Vec3Like,
   playerFacing: Vec3Like,
+  hitOffsetY = 0,
 ): HitZone {
   const localX = impactPoint.x - playerPos.x;
-  const localY = impactPoint.y - playerPos.y;
+  const localY = impactPoint.y - playerPos.y - hitOffsetY;
   const localZ = impactPoint.z - playerPos.z;
   const yRel = localY / PLAYER_RADIUS;
 

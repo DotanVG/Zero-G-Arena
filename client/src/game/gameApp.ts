@@ -1,4 +1,4 @@
-import { GRAB_RADIUS, HITBOX_RADIUS, MATCH_END_DELAY } from "../../../shared/constants";
+import { GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS, MATCH_END_DELAY } from "../../../shared/constants";
 import { generateArenaLayout } from "../../../shared/arena-gen";
 import type { MultiplayerRoomSnapshot } from "../../../shared/multiplayer";
 import { Arena } from "../arena/arena";
@@ -287,10 +287,12 @@ export class App {
 
     this.tickOnlineWeaponFire();
 
+    const localCentre = this.player.getPosition().clone();
+    localCentre.y += HITBOX_OFFSET_Y;
     const localTarget = {
       active: this.player.phase !== "RESPAWNING" && !this.player.damage.frozen,
       id: "local-player",
-      pos: this.player.getPosition().clone(),
+      pos: localCentre,
       radius: HITBOX_RADIUS,
       team: this.player.team,
     };
@@ -342,6 +344,7 @@ export class App {
           hit.impactPoint,
           this.player.getPosition(),
           this.cam.getForward(),
+          HITBOX_OFFSET_Y,
         );
         // Zero impulse — shots freeze but do not push. See localMatch.ts.
         this.player.applyHit(zone, hit.direction.clone().normalize().multiplyScalar(0));
@@ -460,7 +463,6 @@ export class App {
     if (this.player.phase === "BREACH" && !this.arena.isGoalDoorOpen(this.player.currentBreachTeam)) {
       nearBar = false;
     }
-    const inBreach = this.arena.isInBreachRoom(this.player.getPosition(), this.player.team);
 
     if (this.mobile && this.mobileControls) {
       const canGrab = !this.player.damage.leftArm && !this.player.damage.frozen;
@@ -483,7 +485,6 @@ export class App {
       launchPower: this.player.launchPower,
       maxLaunchPower: this.player.maxLaunchPower(),
       nearBar,
-      inBreach,
       damage: this.player.damage,
       tabHeld: this.input.isTabHeld(),
       ownTeam: rosters.ownTeam,
@@ -503,7 +504,6 @@ export class App {
     if (this.player.phase === "BREACH" && !this.arena.isGoalDoorOpen(this.player.currentBreachTeam)) {
       nearBar = false;
     }
-    const inBreach = this.arena.isInBreachRoom(this.player.getPosition(), this.player.team);
 
     if (this.mobile && this.mobileControls) {
       const canGrab = !this.player.damage.leftArm && !this.player.damage.frozen;
@@ -534,7 +534,6 @@ export class App {
       launchPower: this.player.launchPower,
       maxLaunchPower: this.player.maxLaunchPower(),
       nearBar,
-      inBreach,
       damage: this.player.damage,
       tabHeld: this.input.isTabHeld(),
       ownTeam: rosters.ownTeam,
@@ -813,13 +812,19 @@ export class App {
     const phase = this.round.getPhase();
     const playerAlive = this.player.phase !== "RESPAWNING";
     const roundActive = this.appMode === "online" ? this.onlineGameActive : phase !== "LOBBY";
-    // Frozen players cannot fire — hide the viewmodel so it reads visually
-    // as "incapacitated" rather than "armed but idle".
-    const canWield = !this.player.damage.frozen;
 
     this.player.setThirdPersonGunVisible(
-      roundActive && playerAlive && canWield && (this.thirdPerson || isSelfie),
+      roundActive && playerAlive && (this.thirdPerson || isSelfie),
     );
-    this.gun.setVisible(roundActive && playerAlive && canWield && !this.thirdPerson && !isSelfie);
+    this.gun.setVisible(roundActive && playerAlive && !this.thirdPerson && !isSelfie);
+
+    // When the local player is frozen or their right arm is disabled,
+    // tint the pistol with the enemy team's colour so the player sees
+    // they were hit instead of guessing why shots no longer fire.
+    const incapacitated = this.player.damage.frozen || this.player.damage.rightArm;
+    const enemyColor = this.player.team === 0 ? 0xff00ff : 0x00ffff;
+    const tint = incapacitated ? enemyColor : null;
+    this.gun.setFrozenTint(tint);
+    this.player.setThirdPersonGunFrozenTint(tint);
   }
 }

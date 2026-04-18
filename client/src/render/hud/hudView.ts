@@ -59,12 +59,6 @@ const HUD_MARKUP = `
     box-shadow:0 0 8px rgba(255,255,255,0.3);
   "></div>
 
-  <div id="hud-breach" style="
-    display:none;position:absolute;bottom:22px;left:50%;
-    transform:translateX(-50%);font-size:13px;color:#88ddff;opacity:0.75;
-    white-space:nowrap;
-  ">BREACH ROOM - GRAVITY ACTIVE</div>
-
   <div id="hud-grab" style="
     display:none;position:absolute;left:50%;bottom:28%;
     transform:translateX(-50%);font-size:17px;color:#aaffff;
@@ -142,7 +136,6 @@ export interface HudElements {
   scoreTeam0: HTMLDivElement;
   scoreTeam1: HTMLDivElement;
   roundTimer: HTMLDivElement;
-  breach: HTMLDivElement;
   grab: HTMLDivElement;
   powerWrap: HTMLDivElement;
   powerBar: HTMLDivElement;
@@ -183,7 +176,6 @@ export function createHudView(): HudElements {
     scoreTeam0: q('hud-score-team0'),
     scoreTeam1: q('hud-score-team1'),
     roundTimer: q('hud-round-timer'),
-    breach: q('hud-breach'),
     grab: q('hud-grab'),
     powerWrap: q('hud-power-wrap'),
     powerBar: q('hud-power-bar'),

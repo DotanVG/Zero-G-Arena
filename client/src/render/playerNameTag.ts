@@ -11,7 +11,7 @@ export class PlayerNameTag {
   private readonly sprite: THREE.Sprite;
   private readonly texture: THREE.CanvasTexture;
 
-  public constructor(name: string, team: 0 | 1, yOffset = 2.4) {
+  public constructor(name: string, team: 0 | 1, yOffset = 1.15) {
     const canvas = document.createElement("canvas");
     canvas.width = CANVAS_W;
     canvas.height = CANVAS_H;
@@ -21,10 +21,15 @@ export class PlayerNameTag {
 
     this.texture = new THREE.CanvasTexture(canvas);
 
+    // depthTest true + depthWrite false: the tag is occluded by arena
+    // geometry (walls, obstacles) like the alien body it belongs to, so
+    // you can't read enemy call signs through walls — but it doesn't
+    // write depth itself, avoiding z-fighting against the helmet sprite.
     const material = new THREE.SpriteMaterial({
       map: this.texture,
       transparent: true,
-      depthTest: false,
+      depthTest: true,
+      depthWrite: false,
       sizeAttenuation: true,
     });
 
@@ -33,7 +38,6 @@ export class PlayerNameTag {
     // gives sharper text without bloating billboard scale.
     this.sprite.scale.set(CANVAS_W / CANVAS_H * 0.55, 0.55, 1);
     this.sprite.position.set(0, yOffset, 0);
-    this.sprite.renderOrder = 999;
   }
 
   public getObject(): THREE.Sprite {

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BOT_NAMES, GRAB_RADIUS, HITBOX_RADIUS, MATCH_POINT_TARGET, PLAYER_RADIUS } from "../../../shared/constants";
+import { BOT_NAMES, GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS, MATCH_POINT_TARGET, PLAYER_RADIUS } from "../../../shared/constants";
 import { findMatchWinner } from "../../../shared/match-flow";
 import { getSoloBotFill, type SoloMatchConfig } from "../../../shared/match";
 import {
@@ -207,21 +207,27 @@ export class LocalMatch {
   }
 
   public getProjectileTargets(player: LocalPlayer): ProjectileActorTarget[] {
+    const humanCentre = player.getPosition().clone();
+    humanCentre.y += HITBOX_OFFSET_Y;
     return [
       {
         active: player.phase !== "RESPAWNING" && !player.damage.frozen,
         id: LOCAL_PLAYER_ID,
-        pos: player.getPosition().clone(),
+        pos: humanCentre,
         radius: HITBOX_RADIUS,
         team: this.config.humanTeam,
       },
-      ...this.bots.map((bot) => ({
-        active: bot.phase !== "RESPAWNING" && !bot.damage.frozen,
-        id: bot.id,
-        pos: bot.phys.pos.clone(),
-        radius: HITBOX_RADIUS,
-        team: bot.team,
-      })),
+      ...this.bots.map((bot) => {
+        const botCentre = bot.phys.pos.clone();
+        botCentre.y += HITBOX_OFFSET_Y;
+        return {
+          active: bot.phase !== "RESPAWNING" && !bot.damage.frozen,
+          id: bot.id,
+          pos: botCentre,
+          radius: HITBOX_RADIUS,
+          team: bot.team,
+        };
+      }),
     ];
   }
 
@@ -243,6 +249,7 @@ export class LocalMatch {
         event.impactPoint,
         player.getPosition(),
         camera.getForward(),
+        HITBOX_OFFSET_Y,
       );
       const frozen = player.applyHit(zone, impulse);
       if (frozen) {
@@ -267,6 +274,7 @@ export class LocalMatch {
       toVec3(event.impactPoint),
       toVec3(bot.phys.pos),
       yawForward(bot.rot.yaw),
+      HITBOX_OFFSET_Y,
     );
     const frozen = applyHitToBot(bot, zone, impulse);
     if (event.ownerId === LOCAL_PLAYER_ID) {

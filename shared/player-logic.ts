@@ -53,9 +53,11 @@ export function classifyHitZone(
   impactPoint: Vec3,
   playerPos: Vec3,
   playerFacing: Vec3,
+  hitOffsetY = 0,
 ): HitZone {
   const local = v3.sub(impactPoint, playerPos);
-  const yRel = local.y / PLAYER_RADIUS;
+  // Shift so the hit sphere's centre is y=0, not the physics anchor.
+  const yRel = (local.y - hitOffsetY) / PLAYER_RADIUS;
 
   if (yRel > 0.55) return "head";
   if (yRel > -0.2) {

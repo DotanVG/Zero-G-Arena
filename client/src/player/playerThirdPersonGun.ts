@@ -30,6 +30,9 @@ export class ThirdPersonGun {
   private offset = DEFAULT_OFFSET.clone();
   private rotation = DEFAULT_ROTATION.clone();
   private tuningEnabled = false;
+  private tintMaterials: THREE.MeshStandardMaterial[] = [];
+  private tintOriginal: { emissive: THREE.Color; intensity: number }[] = [];
+  private pendingTint: number | null = null;
 
   /**
    * Find the right-hand bone on the alien rig and load the gun GLB as a
@@ -51,10 +54,30 @@ export class ThirdPersonGun {
         gun.rotation.copy(this.rotation);
         gun.visible = this.visible;
 
+        // Clone materials so per-instance tint doesn't leak across players.
+        gun.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          const src = Array.isArray(obj.material) ? obj.material : [obj.material];
+          const cloned = src.map((m) => m.clone());
+          obj.material = Array.isArray(obj.material) ? cloned : cloned[0];
+          for (const m of cloned) {
+            if (m instanceof THREE.MeshStandardMaterial) {
+              this.tintMaterials.push(m);
+              this.tintOriginal.push({
+                emissive: m.emissive.clone(),
+                intensity: m.emissiveIntensity,
+              });
+            }
+          }
+        });
+
         this.muzzleLocal = this.computeMuzzleLocal(gun);
         palm.add(gun);
         this.model = gun;
         this.applyTransform();
+        if (this.pendingTint !== null) {
+          this.applyTint(this.pendingTint);
+        }
       })
       .catch((err: unknown) => console.error('[ThirdPersonGun] failed to load Ray Gun.glb', err));
   }
@@ -62,6 +85,32 @@ export class ThirdPersonGun {
   public setVisible(visible: boolean): void {
     this.visible = visible;
     if (this.model) this.model.visible = visible;
+  }
+
+  public setFrozenTint(color: number | null): void {
+    if (!this.model) {
+      this.pendingTint = color;
+      return;
+    }
+    this.applyTint(color);
+  }
+
+  private applyTint(color: number | null): void {
+    if (color === null) {
+      for (let i = 0; i < this.tintMaterials.length; i++) {
+        const m = this.tintMaterials[i];
+        const orig = this.tintOriginal[i];
+        m.emissive.copy(orig.emissive);
+        m.emissiveIntensity = orig.intensity;
+        m.needsUpdate = true;
+      }
+      return;
+    }
+    for (const m of this.tintMaterials) {
+      m.emissive.setHex(color);
+      m.emissiveIntensity = 1.3;
+      m.needsUpdate = true;
+    }
   }
 
   public dispose(): void {

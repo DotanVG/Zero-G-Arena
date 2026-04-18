@@ -21,6 +21,20 @@ describe("classifyHitZone", () => {
   it("classifies right arm hits relative to facing", () => {
     expect(classifyHitZone({ x: 0.5, y: 0.1, z: 0 }, playerPos, facing)).toBe("rightArm");
   });
+
+  it("hitOffsetY shifts the classification origin so a hit on the alien torso reads as body", () => {
+    // With offset -0.35, a shot that lands 0.35 below physics centre
+    // is at the sphere centre → y_rel ≈ 0 → body.
+    expect(
+      classifyHitZone({ x: 0, y: -0.35, z: 0 }, playerPos, facing, -0.35),
+    ).toBe("body");
+    // A shot that lands on the old "head" yRel > 0.55 but without the
+    // offset would still be head; with the offset it becomes even
+    // further above the sphere and still classifies as head.
+    expect(
+      classifyHitZone({ x: 0, y: 0.2, z: 0 }, playerPos, facing, -0.35),
+    ).toBe("head");
+  });
 });
 
 describe("maxLaunchPower", () => {

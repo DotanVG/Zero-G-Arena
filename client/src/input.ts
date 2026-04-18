@@ -29,20 +29,25 @@ export class InputManager {
       if (e.code === 'KeyE' && !e.repeat) this.grabPressed = true;
       if (e.code === 'KeyV' && !e.repeat) this.thirdPersonTogglePressed = true;
       if (e.code === 'KeyP' && !e.repeat) this.gunTuneTogglePressed = true;
-      if (e.code === 'Backspace' && !e.repeat) this.gunTuneResetPressed = true;
       if (e.code === 'Enter' && !e.repeat) this.gunTunePrintPressed = true;
-      // Prevent Tab from switching browser focus
-      if (
-        e.code === 'Tab'
-        || e.code === 'ArrowUp'
-        || e.code === 'ArrowDown'
-        || e.code === 'ArrowLeft'
-        || e.code === 'ArrowRight'
-        || e.code === 'PageUp'
-        || e.code === 'PageDown'
-        || e.code === 'Backspace'
-      ) {
-        e.preventDefault();
+      // Only intercept navigation/delete keys when focus is NOT in a text field,
+      // so the Call Sign input and other fields retain normal keyboard behaviour.
+      const tag = (document.activeElement as HTMLElement | null)?.tagName ?? '';
+      const focusedInField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (!focusedInField) {
+        if (e.code === 'Backspace' && !e.repeat) this.gunTuneResetPressed = true;
+        if (
+          e.code === 'Tab'
+          || e.code === 'ArrowUp'
+          || e.code === 'ArrowDown'
+          || e.code === 'ArrowLeft'
+          || e.code === 'ArrowRight'
+          || e.code === 'PageUp'
+          || e.code === 'PageDown'
+          || e.code === 'Backspace'
+        ) {
+          e.preventDefault();
+        }
       }
     });
 

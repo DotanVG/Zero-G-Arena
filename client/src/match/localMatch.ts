@@ -536,7 +536,7 @@ export class LocalMatch {
     shots: SpawnProjectileEvent[],
   ): void {
     if (bot.phase === "FROZEN") {
-      integrateFloating(bot, arena, dt);
+      integrateFrozenDrift(bot, arena, dt);
       if (arena.isInBreachRoom(bot.phys.pos, bot.team)) {
         returnBotToOwnBreach(bot);
       }
@@ -620,8 +620,13 @@ export class LocalMatch {
         this.stepBotBreachPhysics(bot, arena, dt);
         break;
       case "FLOATING":
-      case "FROZEN":
         integrateFloating(bot, arena, dt);
+        if (arena.isInBreachRoom(bot.phys.pos, bot.team)) {
+          returnBotToOwnBreach(bot);
+        }
+        break;
+      case "FROZEN":
+        integrateFrozenDrift(bot, arena, dt);
         if (arena.isInBreachRoom(bot.phys.pos, bot.team)) {
           returnBotToOwnBreach(bot);
         }
@@ -800,6 +805,18 @@ function integrateFloating(bot: BotState, arena: Arena, dt = 0): void {
 
   integrateZeroG(bot.phys, dt);
   bounceArena(bot.phys, goalAxis, perpAxis, portalFacesOpen);
+  arena.bounceObstacles(bot.phys);
+}
+
+/**
+ * Frozen drift: same zero-G + obstacle bounce as FLOATING, but the arena
+ * bounce is FULLY SOLID — frozen bodies can't pass through open portals
+ * or breach into the enemy room. They still drift and tumble through the
+ * arena, just like un-frozen floaters, only without free-pass doors.
+ */
+function integrateFrozenDrift(bot: BotState, arena: Arena, dt = 0): void {
+  integrateZeroG(bot.phys, dt);
+  bounceArena(bot.phys);
   arena.bounceObstacles(bot.phys);
 }
 

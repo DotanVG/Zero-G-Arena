@@ -12,6 +12,7 @@ import {
 import { PlayerDamageGlow } from "../player/playerDamageGlow";
 import { applyBarHoldPose } from "../player/playerGrabPose";
 import { ThirdPersonGun } from "../player/playerThirdPersonGun";
+import { PlayerNameTag } from "../render/playerNameTag";
 
 export class SimulatedPlayerAvatar {
   private readonly animation = new PlayerAnimationController();
@@ -19,11 +20,14 @@ export class SimulatedPlayerAvatar {
   private disposed = false;
   private readonly gun = new ThirdPersonGun();
   private readonly materials = new Set<THREE.MeshStandardMaterial>();
+  private readonly nameTag: PlayerNameTag;
   private ready = false;
   private readonly root = new THREE.Group();
 
-  public constructor(scene: THREE.Scene, team: 0 | 1) {
+  public constructor(scene: THREE.Scene, team: 0 | 1, name = "") {
     this.damageGlow = new PlayerDamageGlow(team);
+    this.nameTag = new PlayerNameTag(name, team);
+    this.root.add(this.nameTag.getObject());
     scene.add(this.root);
 
     void loadAlienRenderClone({ team, variant: "bot" })
@@ -55,8 +59,10 @@ export class SimulatedPlayerAvatar {
   ): void {
     this.root.position.copy(pos);
     this.root.rotation.set(0, yaw, 0);
-    this.root.visible = phase !== "RESPAWNING";
-    this.gun.setVisible(phase !== "RESPAWNING");
+    const visible = phase !== "RESPAWNING";
+    this.root.visible = visible;
+    this.gun.setVisible(visible);
+    this.nameTag.setVisible(visible);
     this.damageGlow.update(damage, phase, dt);
 
     if (!this.ready) return;
@@ -81,6 +87,7 @@ export class SimulatedPlayerAvatar {
     this.disposed = true;
     this.damageGlow.dispose();
     this.gun.dispose();
+    this.nameTag.dispose();
     scene.remove(this.root);
     for (const material of this.materials) {
       material.dispose();

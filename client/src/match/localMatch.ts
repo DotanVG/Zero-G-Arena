@@ -703,7 +703,7 @@ function createDamageState(): DamageState {
 function createBotState(scene: THREE.Scene, id: string, name: string, team: 0 | 1): BotState {
   const personality = createBotPersonality(id, team);
   return {
-    avatar: new SimulatedPlayerAvatar(scene, team),
+    avatar: new SimulatedPlayerAvatar(scene, team, name),
     brain: new BotBrain(personality),
     currentBreachTeam: team,
     damage: createDamageState(),

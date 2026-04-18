@@ -1,23 +1,28 @@
-import { Client as ColyseusClient, type Room } from "colyseus.js";
+import { Client as ColyseusClient, type Room } from "@colyseus/sdk";
 import { isMatchTeamSize, type MatchTeamSize } from "../../../shared/match";
 import {
   MULTIPLAYER_DEFAULT_TEAM_SIZE,
   MULTIPLAYER_ROOM_NAME,
+  type BreachReportMessage,
   type FillBotsMessage,
+  type FreezeEventMessage,
+  type HitReportMessage,
   type LobbyEventMessage,
   type LobbyMemberSnapshot,
   type LobbyTeam,
   type MultiplayerJoinOptions,
   type MultiplayerRoomSnapshot,
+  type OnlineActorSnapshot,
+  type PlayerUpdateMessage,
+  type RoundWinEventMessage,
   type SetReadyMessage,
   type SetTeamSizeMessage,
   type SwitchTeamMessage,
 } from "../../../shared/multiplayer";
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL
-  ?? (location.hostname === "localhost" || location.hostname === "127.0.0.1"
-    ? "http://localhost:3001"
-    : `${location.protocol}//${location.host}`);
+// Use same origin so Vite proxies /matchmake HTTP to the game server.
+// WebSocket endpoint is taken from the seat reservation's publicAddress field (set by the server).
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? `${location.protocol}//${location.host}`;
 
 type ColyseusRoomState = {
   phase: string;
@@ -28,6 +33,7 @@ type ColyseusRoomState = {
   teamSize: number;
   roundNumber: number;
   members: unknown;
+  actors: unknown;
 };
 
 export class NetClient {
@@ -37,6 +43,8 @@ export class NetClient {
   public onStateChange: ((snapshot: MultiplayerRoomSnapshot) => void) | null = null;
   public onLobbyEvent: ((event: LobbyEventMessage) => void) | null = null;
   public onLeave: (() => void) | null = null;
+  public onFreezeEvent: ((event: FreezeEventMessage) => void) | null = null;
+  public onRoundWinEvent: ((event: RoundWinEventMessage) => void) | null = null;
 
   public async connect(options: MultiplayerJoinOptions): Promise<MultiplayerRoomSnapshot> {
     await this.disconnect(false);
@@ -52,6 +60,12 @@ export class NetClient {
     room.onMessage("lobby_event", (event: LobbyEventMessage) => {
       this.onLobbyEvent?.(event);
     });
+    room.onMessage("freeze_event", (event: FreezeEventMessage) => {
+      this.onFreezeEvent?.(event);
+    });
+    room.onMessage("round_win_event", (event: RoundWinEventMessage) => {
+      this.onRoundWinEvent?.(event);
+    });
     room.onLeave(() => {
       this.room = null;
       this.onLeave?.();
@@ -66,6 +80,10 @@ export class NetClient {
     if (room) {
       await room.leave(consented);
     }
+  }
+
+  public getSessionId(): string | null {
+    return this.room?.sessionId ?? null;
   }
 
   public setReady(ready: boolean): void {
@@ -84,6 +102,18 @@ export class NetClient {
     this.send<FillBotsMessage>("fill_bots", { fill });
   }
 
+  public sendPlayerUpdate(message: PlayerUpdateMessage): void {
+    this.send<PlayerUpdateMessage>("player_update", message);
+  }
+
+  public sendHitReport(message: HitReportMessage): void {
+    this.send<HitReportMessage>("hit_report", message);
+  }
+
+  public sendBreachReport(message: BreachReportMessage): void {
+    this.send<BreachReportMessage>("breach_report", message);
+  }
+
   private send<T>(type: string, message: T): void {
     this.room?.send(type, message);
   }
@@ -94,6 +124,7 @@ function buildSnapshot(
   state: ColyseusRoomState,
 ): MultiplayerRoomSnapshot {
   const members = getMembers(state.members);
+  const actors = getActors(state.actors);
   const self = members.find((member) => member.id === room.sessionId);
   const teamSize = isMatchTeamSize(state.teamSize)
     ? state.teamSize
@@ -113,6 +144,7 @@ function buildSnapshot(
     roundNumber: Number(state.roundNumber ?? 0),
     teamSize,
     members,
+    actors,
   };
 }
 
@@ -138,6 +170,28 @@ function getMembers(rawMembers: unknown): LobbyMemberSnapshot[] {
   return members.sort(sortMembers);
 }
 
+function getActors(rawActors: unknown): OnlineActorSnapshot[] {
+  const actors: OnlineActorSnapshot[] = [];
+  const collection = rawActors as {
+    forEach?: (cb: (value: Record<string, unknown>) => void) => void;
+  };
+
+  if (typeof collection?.forEach === "function") {
+    collection.forEach((value) => {
+      actors.push(toActorSnapshot(value));
+    });
+    return actors;
+  }
+
+  if (rawActors && typeof rawActors === "object") {
+    for (const value of Object.values(rawActors as Record<string, Record<string, unknown>>)) {
+      actors.push(toActorSnapshot(value));
+    }
+  }
+
+  return actors;
+}
+
 function toLobbyMember(value: Record<string, unknown>): LobbyMemberSnapshot {
   return {
     id: String(value.id ?? ""),
@@ -146,6 +200,26 @@ function toLobbyMember(value: Record<string, unknown>): LobbyMemberSnapshot {
     ready: Boolean(value.ready),
     connected: Boolean(value.connected),
     isBot: Boolean(value.isBot),
+  };
+}
+
+function toActorSnapshot(value: Record<string, unknown>): OnlineActorSnapshot {
+  return {
+    id: String(value.id ?? ""),
+    name: String(value.name ?? "Pilot"),
+    team: value.team === 1 ? 1 : 0,
+    isBot: Boolean(value.isBot),
+    posX: Number(value.posX ?? 0),
+    posY: Number(value.posY ?? 0),
+    posZ: Number(value.posZ ?? 0),
+    yaw: Number(value.yaw ?? 0),
+    phase: String(value.phase ?? "BREACH"),
+    frozen: Boolean(value.frozen),
+    leftArm: Boolean(value.leftArm),
+    rightArm: Boolean(value.rightArm),
+    legs: Boolean(value.legs),
+    kills: Number(value.kills ?? 0),
+    deaths: Number(value.deaths ?? 0),
   };
 }
 

@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@colyseus/sdk": "^0.17.40",
     "@types/three": "^0.179.0",
     "colyseus.js": "^0.16.22",
     "three": "^0.179.1",

@@ -48,7 +48,7 @@ export class OnlineMatch {
       const pos = new THREE.Vector3(snap.posX, snap.posY, snap.posZ);
       avatar.update(
         pos,
-        { frozen: snap.frozen, leftArm: snap.leftArm, rightArm: snap.rightArm, legs: snap.legs },
+        { frozen: snap.frozen, leftArm: snap.leftArm, rightArm: snap.rightArm, leftLeg: snap.leftLeg, rightLeg: snap.rightLeg },
         snap.phase as PlayerPhase,
         snap.yaw,
         dt,

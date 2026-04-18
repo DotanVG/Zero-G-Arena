@@ -1,8 +1,9 @@
 import * as THREE from "three";
-import type { PlayerPhase } from "../../../shared/schema";
+import type { DamageState, PlayerPhase } from "../../../shared/schema";
 import { loadAlienRenderClone } from "../player/alienRenderAsset";
 import {
   ANIM_DEATH,
+  ANIM_FADE_SECONDS,
   ANIM_FLOAT,
   ANIM_IDLE_HOLD,
   ANIM_RUN_HOLD,
@@ -18,6 +19,7 @@ export class SimulatedPlayerAvatar {
   private readonly animation = new PlayerAnimationController();
   private readonly damageGlow: PlayerDamageGlow;
   private disposed = false;
+  private frozenHoldTimer = 0;
   private readonly gun = new ThirdPersonGun();
   private readonly materials = new Set<THREE.MeshStandardMaterial>();
   private readonly nameTag: PlayerNameTag;
@@ -51,7 +53,7 @@ export class SimulatedPlayerAvatar {
 
   public update(
     pos: THREE.Vector3,
-    damage: { frozen: boolean; leftArm: boolean; rightArm: boolean; legs: boolean },
+    damage: DamageState,
     phase: PlayerPhase,
     yaw: number,
     dt: number,
@@ -69,7 +71,19 @@ export class SimulatedPlayerAvatar {
 
     const animation = selectAnimation(phase, moveSpeed);
     this.animation.setTargetAnimation(animation);
-    this.animation.tickMixers(dt);
+
+    // Hold the frozen pose: once the crossfade into ANIM_DEATH settles, tick
+    // the mixer with dt=0 so the alien doesn't keep flailing through the
+    // death loop. Reset the timer whenever phase leaves FROZEN.
+    if (phase === "FROZEN") {
+      this.frozenHoldTimer += dt;
+    } else {
+      this.frozenHoldTimer = 0;
+    }
+    const animationDt = phase === "FROZEN" && this.frozenHoldTimer > ANIM_FADE_SECONDS
+      ? 0
+      : dt;
+    this.animation.tickMixers(animationDt);
 
     if (phase === "GRABBING" || phase === "AIMING") {
       applyBarHoldPose(this.animation.getRigs());

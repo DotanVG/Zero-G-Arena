@@ -519,12 +519,14 @@ export class LocalMatch {
         anchored: isAnchored(player.phase),
         pos: player.getPosition(),
         radius: ACTOR_COLLISION_RADIUS,
+        vel: player.phys.vel,
       },
       ...this.bots.map((bot) => ({
         active: bot.phase !== "RESPAWNING",
         anchored: isAnchored(bot.phase),
         pos: bot.phys.pos,
         radius: ACTOR_COLLISION_RADIUS,
+        vel: bot.phys.vel,
       })),
     ]);
   }
@@ -539,9 +541,6 @@ export class LocalMatch {
   ): void {
     if (bot.phase === "FROZEN") {
       integrateFrozenDrift(bot, arena, dt);
-      if (arena.isInBreachRoom(bot.phys.pos, bot.team)) {
-        returnBotToOwnBreach(bot);
-      }
       return;
     }
 
@@ -629,9 +628,6 @@ export class LocalMatch {
         break;
       case "FROZEN":
         integrateFrozenDrift(bot, arena, dt);
-        if (arena.isInBreachRoom(bot.phys.pos, bot.team)) {
-          returnBotToOwnBreach(bot);
-        }
         break;
       case "GRABBING":
       case "AIMING":
@@ -731,8 +727,9 @@ function createDamageState(): DamageState {
   return {
     frozen: false,
     leftArm: false,
-    legs: false,
+    leftLeg: false,
     rightArm: false,
+    rightLeg: false,
   };
 }
 
@@ -767,15 +764,10 @@ function applyHitToBot(
   switch (zone) {
     case "head":
     case "body":
-      if (!bot.damage.frozen) {
-        bot.damage.frozen = true;
-        bot.deaths += 1;
-      }
-      bot.phase = "FROZEN";
-      bot.grabbedBarPos = null;
-      return true;
+      return promoteBotToFullFreeze(bot);
     case "rightArm":
       bot.damage.rightArm = true;
+      if (allBotLimbsDamaged(bot)) return promoteBotToFullFreeze(bot);
       return false;
     case "leftArm":
       bot.damage.leftArm = true;
@@ -783,12 +775,33 @@ function applyHitToBot(
         bot.phase = "FLOATING";
         bot.grabbedBarPos = null;
       }
+      if (allBotLimbsDamaged(bot)) return promoteBotToFullFreeze(bot);
       return false;
-    case "legs":
-      bot.damage.legs = true;
+    case "leftLeg":
+      bot.damage.leftLeg = true;
       bot.launchPower = Math.min(bot.launchPower, maxLaunchPower(bot.damage));
+      if (allBotLimbsDamaged(bot)) return promoteBotToFullFreeze(bot);
+      return false;
+    case "rightLeg":
+      bot.damage.rightLeg = true;
+      bot.launchPower = Math.min(bot.launchPower, maxLaunchPower(bot.damage));
+      if (allBotLimbsDamaged(bot)) return promoteBotToFullFreeze(bot);
       return false;
   }
+}
+
+function allBotLimbsDamaged(bot: BotState): boolean {
+  return bot.damage.leftArm && bot.damage.rightArm && bot.damage.leftLeg && bot.damage.rightLeg;
+}
+
+function promoteBotToFullFreeze(bot: BotState): true {
+  if (!bot.damage.frozen) {
+    bot.damage.frozen = true;
+    bot.deaths += 1;
+  }
+  bot.phase = "FROZEN";
+  bot.grabbedBarPos = null;
+  return true;
 }
 
 function integrateFloating(bot: BotState, arena: Arena, dt = 0): void {
@@ -811,10 +824,10 @@ function integrateFloating(bot: BotState, arena: Arena, dt = 0): void {
 }
 
 /**
- * Frozen drift: same zero-G + obstacle bounce as FLOATING, but the arena
- * bounce is FULLY SOLID — frozen bodies can't pass through open portals
- * or breach into the enemy room. They still drift and tumble through the
- * arena, just like un-frozen floaters, only without free-pass doors.
+ * Frozen drift: zero-G + fully solid arena walls. Frozen bodies cannot
+ * breach — including back into their own room. Limb-damaged (but not
+ * frozen) allies get their limbs healed only by drifting home via the
+ * FLOATING branch (see integrateFloating + returnBotToOwnBreach).
  */
 function integrateFrozenDrift(bot: BotState, arena: Arena, dt = 0): void {
   integrateZeroG(bot.phys, dt);
@@ -871,8 +884,13 @@ function resetBotsForRound(
 }
 
 function returnBotToOwnBreach(bot: BotState): void {
+  // Frozen bots cannot drift home — the arena walls are solid while FROZEN.
+  // A wounded-but-FLOATING bot that makes it back heals its limb damage.
   bot.currentBreachTeam = bot.team;
-  bot.damage.frozen = false;
+  bot.damage.leftArm = false;
+  bot.damage.rightArm = false;
+  bot.damage.leftLeg = false;
+  bot.damage.rightLeg = false;
   bot.phase = "BREACH";
   bot.phys.vel.y = 0;
 }

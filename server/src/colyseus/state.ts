@@ -26,7 +26,8 @@ export class ActorState extends Schema {
   public frozen = false;
   public leftArm = false;
   public rightArm = false;
-  public legs = false;
+  public leftLeg = false;
+  public rightLeg = false;
   public kills = 0;
   public deaths = 0;
   public frozenTimer = 0;
@@ -70,7 +71,8 @@ defineTypes(ActorState, {
   frozen: "boolean",
   leftArm: "boolean",
   rightArm: "boolean",
-  legs: "boolean",
+  leftLeg: "boolean",
+  rightLeg: "boolean",
   kills: "number",
   deaths: "number",
   frozenTimer: "number",

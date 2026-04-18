@@ -8,19 +8,23 @@ import {
   spawnPosition,
 } from "../shared/player-logic";
 import {
+  BOTH_LEGS_HIT_LAUNCH_FACTOR,
   HITBOX_OFFSET_Y,
   HITBOX_RADIUS,
-  LEGS_HIT_LAUNCH_FACTOR,
   MAX_LAUNCH_SPEED,
+  ONE_LEG_HIT_LAUNCH_FACTOR,
 } from "../shared/constants";
 
 describe("classifyHitZone", () => {
   const playerPos = { x: 0, y: 0, z: 0 };
   const facing = { x: 0, y: 0, z: -1 };
 
-  it("classifies head and legs hits", () => {
+  it("classifies head and leg hits", () => {
     expect(classifyHitZone({ x: 0, y: 0.8, z: 0 }, playerPos, facing)).toBe("head");
-    expect(classifyHitZone({ x: 0, y: -0.4, z: 0 }, playerPos, facing)).toBe("legs");
+    // Right leg — positive x projection on the right vector.
+    expect(classifyHitZone({ x: 0.1, y: -0.4, z: 0 }, playerPos, facing)).toBe("rightLeg");
+    // Left leg — negative x projection.
+    expect(classifyHitZone({ x: -0.1, y: -0.4, z: 0 }, playerPos, facing)).toBe("leftLeg");
   });
 
   it("classifies right arm hits relative to facing", () => {
@@ -39,9 +43,13 @@ describe("classifyHitZone", () => {
     expect(
       classifyHitZone({ x: 0, y: HITBOX_OFFSET_Y, z: 0 }, playerPos, facing, HITBOX_OFFSET_Y, HITBOX_RADIUS),
     ).toBe("body");
+    // Below the body band now splits into left/right by x projection.
     expect(
-      classifyHitZone({ x: 0, y: bottom, z: 0 }, playerPos, facing, HITBOX_OFFSET_Y, HITBOX_RADIUS),
-    ).toBe("legs");
+      classifyHitZone({ x: 0.05, y: bottom, z: 0 }, playerPos, facing, HITBOX_OFFSET_Y, HITBOX_RADIUS),
+    ).toBe("rightLeg");
+    expect(
+      classifyHitZone({ x: -0.05, y: bottom, z: 0 }, playerPos, facing, HITBOX_OFFSET_Y, HITBOX_RADIUS),
+    ).toBe("leftLeg");
     expect(
       classifyHitZone(
         { x: HITBOX_RADIUS * 0.8, y: HITBOX_OFFSET_Y, z: 0 },
@@ -69,18 +77,26 @@ describe("classifyHitZone", () => {
 });
 
 describe("maxLaunchPower", () => {
-  it("drops launch power after leg damage", () => {
-    expect(maxLaunchPower({ frozen: false, leftArm: false, rightArm: false, legs: false })).toBe(MAX_LAUNCH_SPEED);
-    expect(maxLaunchPower({ frozen: false, leftArm: false, rightArm: false, legs: true })).toBe(
-      MAX_LAUNCH_SPEED * LEGS_HIT_LAUNCH_FACTOR,
-    );
+  it("caps launch power by the number of damaged legs", () => {
+    expect(
+      maxLaunchPower({ frozen: false, leftArm: false, rightArm: false, leftLeg: false, rightLeg: false }),
+    ).toBe(MAX_LAUNCH_SPEED);
+    expect(
+      maxLaunchPower({ frozen: false, leftArm: false, rightArm: false, leftLeg: true, rightLeg: false }),
+    ).toBe(MAX_LAUNCH_SPEED * ONE_LEG_HIT_LAUNCH_FACTOR);
+    expect(
+      maxLaunchPower({ frozen: false, leftArm: false, rightArm: false, leftLeg: false, rightLeg: true }),
+    ).toBe(MAX_LAUNCH_SPEED * ONE_LEG_HIT_LAUNCH_FACTOR);
+    expect(
+      maxLaunchPower({ frozen: false, leftArm: false, rightArm: false, leftLeg: true, rightLeg: true }),
+    ).toBe(MAX_LAUNCH_SPEED * BOTH_LEGS_HIT_LAUNCH_FACTOR);
   });
 });
 
 describe("applyHit", () => {
   it("freezes a player on body hits and clears grab state", () => {
     const state = {
-      damage: { frozen: false, leftArm: false, rightArm: false, legs: false },
+      damage: { frozen: false, leftArm: false, rightArm: false, leftLeg: false, rightLeg: false },
       deaths: 0,
       grabbedBarPos: { x: 1, y: 2, z: 3 },
       launchPower: 5,
@@ -94,6 +110,39 @@ describe("applyHit", () => {
     expect(state.damage.frozen).toBe(true);
     expect(state.grabbedBarPos).toBeNull();
     expect(state.deaths).toBe(1);
+  });
+
+  it("promotes to full freeze when the 4th limb is damaged", () => {
+    const state = {
+      damage: { frozen: false, leftArm: true, rightArm: true, leftLeg: true, rightLeg: false },
+      deaths: 0,
+      grabbedBarPos: null,
+      launchPower: 0,
+      phase: "FLOATING" as const,
+      vel: { x: 0, y: 0, z: 0 },
+    };
+
+    const killed = applyHit(state, "rightLeg", { x: 0, y: 0, z: 0 });
+    expect(killed).toBe(true);
+    expect(state.damage.frozen).toBe(true);
+    expect(state.phase).toBe("FROZEN");
+    expect(state.deaths).toBe(1);
+  });
+
+  it("does not freeze on 3 limbs damaged", () => {
+    const state = {
+      damage: { frozen: false, leftArm: true, rightArm: true, leftLeg: false, rightLeg: false },
+      deaths: 0,
+      grabbedBarPos: null,
+      launchPower: 0,
+      phase: "FLOATING" as const,
+      vel: { x: 0, y: 0, z: 0 },
+    };
+
+    const killed = applyHit(state, "leftLeg", { x: 0, y: 0, z: 0 });
+    expect(killed).toBe(false);
+    expect(state.damage.frozen).toBe(false);
+    expect(state.phase).toBe("FLOATING");
   });
 });
 
@@ -151,5 +200,48 @@ describe("resolveActorCollisions", () => {
     expect(moved).toBe(true);
     expect(bodies[0].pos.x).toBeCloseTo(0, 4);
     expect(bodies[1].pos.x).toBeGreaterThanOrEqual(1.59);
+  });
+
+  it("cancels approach velocity but preserves tangential momentum", () => {
+    // Two bodies on the x axis. A moves +x at 4, B moves -x at 4 (head-on).
+    // Tangential component (z) is 2 on A — should survive the collision.
+    const a = {
+      pos: { x: 0, y: 0, z: 0 },
+      radius: 0.5,
+      vel: { x: 4, y: 0, z: 2 },
+    };
+    const b = {
+      pos: { x: 0.6, y: 0, z: 0 },
+      radius: 0.5,
+      vel: { x: -4, y: 0, z: 0 },
+    };
+
+    resolveActorCollisions([a, b]);
+
+    // Approach velocity along +x should be cancelled on both bodies.
+    expect(a.vel.x).toBeLessThanOrEqual(0.01);
+    expect(b.vel.x).toBeGreaterThanOrEqual(-0.01);
+    // Tangential (z) velocity on A is preserved — momentum kept.
+    expect(a.vel.z).toBeCloseTo(2, 4);
+  });
+
+  it("leaves velocities untouched when bodies are already separating", () => {
+    const a = {
+      pos: { x: 0, y: 0, z: 0 },
+      radius: 0.5,
+      vel: { x: -3, y: 0, z: 0 },
+    };
+    const b = {
+      pos: { x: 0.6, y: 0, z: 0 },
+      radius: 0.5,
+      vel: { x: 3, y: 0, z: 0 },
+    };
+
+    resolveActorCollisions([a, b]);
+
+    // They overlap — positions get pushed apart — but velocities are already
+    // pointing away from each other, so the approach guard should leave them.
+    expect(a.vel.x).toBeCloseTo(-3, 4);
+    expect(b.vel.x).toBeCloseTo(3, 4);
   });
 });

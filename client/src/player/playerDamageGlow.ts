@@ -133,12 +133,16 @@ function isSlotActive(id: GlowSlotId, damage: DamageState): boolean {
     case "frozenCore":
     case "frozenHead":
       return damage.frozen;
+    // Limb glows are suppressed once the whole body is frozen so the full-body
+    // freeze glow reads cleanly — the individual limb markers are redundant
+    // once the player is fully FROZEN for the round.
     case "leftArm":
-      return damage.leftArm;
+      return !damage.frozen && damage.leftArm;
     case "rightArm":
-      return damage.rightArm;
+      return !damage.frozen && damage.rightArm;
     case "leftLeg":
+      return !damage.frozen && damage.leftLeg;
     case "rightLeg":
-      return damage.legs;
+      return !damage.frozen && damage.rightLeg;
   }
 }

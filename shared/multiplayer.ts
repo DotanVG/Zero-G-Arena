@@ -35,7 +35,8 @@ export interface OnlineActorSnapshot {
   frozen: boolean;
   leftArm: boolean;
   rightArm: boolean;
-  legs: boolean;
+  leftLeg: boolean;
+  rightLeg: boolean;
   kills: number;
   deaths: number;
 }
@@ -69,7 +70,8 @@ export interface PlayerUpdateMessage {
   frozen: boolean;
   leftArm: boolean;
   rightArm: boolean;
-  legs: boolean;
+  leftLeg: boolean;
+  rightLeg: boolean;
   kills: number;
   deaths: number;
 }

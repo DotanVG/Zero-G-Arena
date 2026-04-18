@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type HitZone = 'head' | 'body' | 'rightArm' | 'leftArm' | 'legs';
+export type HitZone = 'head' | 'body' | 'rightArm' | 'leftArm' | 'leftLeg' | 'rightLeg';
 
 export type PoseBoneName =
   | 'Hips'

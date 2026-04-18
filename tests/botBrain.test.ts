@@ -121,7 +121,7 @@ describe("BotBrain", () => {
     const command = brain.tick(
       {
         currentBreachTeam: 0,
-        damage: { frozen: false, leftArm: false, rightArm: false, legs: false },
+        damage: { frozen: false, leftArm: false, rightArm: false, leftLeg: false, rightLeg: false },
         phase: "FLOATING",
         pos: { x: 0, y: 0, z: 0 },
         rot: { yaw: 0, pitch: 0 },
@@ -142,7 +142,7 @@ describe("BotBrain", () => {
     const brain = new BotBrain(createTestPersonality());
     const bot = {
       currentBreachTeam: 0 as const,
-      damage: { frozen: false, leftArm: false, rightArm: false, legs: false },
+      damage: { frozen: false, leftArm: false, rightArm: false, leftLeg: false, rightLeg: false },
       phase: "FLOATING" as const,
       pos: { x: 0, y: 0, z: 0 },
       rot: { yaw: 0, pitch: 0 },

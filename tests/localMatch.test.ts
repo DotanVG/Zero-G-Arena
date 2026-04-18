@@ -17,7 +17,7 @@ import { LocalMatch, type LocalMatchEvent } from "../client/src/match/localMatch
 
 interface FakePlayer {
   currentBreachTeam: 0 | 1;
-  damage: { frozen: boolean; leftArm: boolean; rightArm: boolean; legs: boolean };
+  damage: { frozen: boolean; leftArm: boolean; rightArm: boolean; leftLeg: boolean; rightLeg: boolean };
   deaths: number;
   kills: number;
   phase: "BREACH" | "FLOATING" | "FROZEN";
@@ -31,7 +31,7 @@ interface FakePlayer {
 function createFakePlayer(team: 0 | 1 = 0): FakePlayer {
   return {
     currentBreachTeam: team,
-    damage: { frozen: false, leftArm: false, rightArm: false, legs: false },
+    damage: { frozen: false, leftArm: false, rightArm: false, leftLeg: false, rightLeg: false },
     deaths: 0,
     kills: 0,
     phase: "BREACH",

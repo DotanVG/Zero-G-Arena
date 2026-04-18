@@ -298,7 +298,12 @@ export class BotBrain {
 
     let fire = false;
     let fireDirection: Vec3 | null = null;
-    if (!bot.damage.rightArm && firingEnemy && this.fireCooldown <= 0) {
+    const canFire =
+      bot.phase !== "FROZEN"
+      && bot.phase !== "RESPAWNING"
+      && !bot.damage.rightArm
+      && !bot.damage.frozen;
+    if (canFire && firingEnemy && this.fireCooldown <= 0) {
       fire = true;
       fireDirection = this.sampleFireDirection(v3.sub(firingEnemy.pos, bot.pos), bot.phase);
       this.fireCooldown = this.personality.fireCooldown;

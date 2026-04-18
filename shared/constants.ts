@@ -16,8 +16,12 @@ export const INVULN_TIME            = 0.5;
 export const FIRE_RATE              = 6;
 
 // Zero-G / Launch
-export const MAX_LAUNCH_SPEED       = 20;
-export const LEGS_HIT_LAUNCH_FACTOR = 2 / 3;
+export const MAX_LAUNCH_SPEED            = 20;
+// Legs are split into left + right. One-leg hit caps launch at 3/4;
+// both-legs hit caps it at 1/2. The HUD power bar uses MAX_LAUNCH_SPEED
+// as its denominator so the cap shows as an incomplete fill.
+export const ONE_LEG_HIT_LAUNCH_FACTOR   = 0.75;
+export const BOTH_LEGS_HIT_LAUNCH_FACTOR = 0.5;
 export const ZERO_G_DAMPING         = 1.0;    // true zero-G — no velocity bleed
 export const GRAB_RADIUS            = 3.0;
 export const LAUNCH_AIM_SENSITIVITY = 0.05;

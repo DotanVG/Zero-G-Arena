@@ -1,16 +1,17 @@
 import type { DamageState, PlayerPhase } from "./schema";
 import {
+  BOTH_LEGS_HIT_LAUNCH_FACTOR,
   BREACH_ROOM_D,
   BREACH_ROOM_H,
   BREACH_ROOM_W,
-  LEGS_HIT_LAUNCH_FACTOR,
   MAX_LAUNCH_SPEED,
+  ONE_LEG_HIT_LAUNCH_FACTOR,
   PLAYER_RADIUS,
 } from "./constants";
 import type { Vec3 } from "./vec3";
 import { v3 } from "./vec3";
 
-export type HitZone = "head" | "body" | "rightArm" | "leftArm" | "legs";
+export type HitZone = "head" | "body" | "rightArm" | "leftArm" | "leftLeg" | "rightLeg";
 
 export interface BarGrabPoint {
   pos: Vec3;
@@ -47,6 +48,11 @@ export interface CollisionBody {
   anchored?: boolean;
   pos: Vec3;
   radius: number;
+  // Optional velocity. When supplied, resolveActorCollisions cancels the
+  // component of relative velocity pointing INTO the collision (preserving
+  // the tangential / momentum-carrying component) so colliders slide past
+  // each other instead of sticking.
+  vel?: Vec3;
 }
 
 export function classifyHitZone(
@@ -63,22 +69,27 @@ export function classifyHitZone(
   const yRel = (local.y - hitOffsetY) / hitRadius;
 
   if (yRel > 0.55) return "head";
+  const worldUp = { x: 0, y: 1, z: 0 };
+  const right = v3.normalize(v3.cross(playerFacing, worldUp));
+  const xProj = v3.dot(local, right);
   if (yRel > -0.2) {
-    const worldUp = { x: 0, y: 1, z: 0 };
-    const right = v3.normalize(v3.cross(playerFacing, worldUp));
-    const xProj = v3.dot(local, right);
     const armThreshold = hitRadius * 0.55;
     if (xProj > armThreshold) return "rightArm";
     if (xProj < -armThreshold) return "leftArm";
     return "body";
   }
-  return "legs";
+  return xProj >= 0 ? "rightLeg" : "leftLeg";
 }
 
 export function maxLaunchPower(damage: DamageState): number {
-  return damage.legs
-    ? MAX_LAUNCH_SPEED * LEGS_HIT_LAUNCH_FACTOR
-    : MAX_LAUNCH_SPEED;
+  const legsHit = (damage.leftLeg ? 1 : 0) + (damage.rightLeg ? 1 : 0);
+  if (legsHit === 2) return MAX_LAUNCH_SPEED * BOTH_LEGS_HIT_LAUNCH_FACTOR;
+  if (legsHit === 1) return MAX_LAUNCH_SPEED * ONE_LEG_HIT_LAUNCH_FACTOR;
+  return MAX_LAUNCH_SPEED;
+}
+
+export function allLimbsDamaged(damage: DamageState): boolean {
+  return damage.leftArm && damage.rightArm && damage.leftLeg && damage.rightLeg;
 }
 
 export function applyHit(
@@ -91,15 +102,10 @@ export function applyHit(
   switch (zone) {
     case "head":
     case "body":
-      if (!state.damage.frozen) {
-        state.damage.frozen = true;
-        state.deaths += 1;
-      }
-      state.phase = "FROZEN";
-      state.grabbedBarPos = null;
-      return true;
+      return promoteToFullFreeze(state);
     case "rightArm":
       state.damage.rightArm = true;
+      if (allLimbsDamaged(state.damage)) return promoteToFullFreeze(state);
       return false;
     case "leftArm":
       state.damage.leftArm = true;
@@ -107,12 +113,29 @@ export function applyHit(
         state.phase = "FLOATING";
         state.grabbedBarPos = null;
       }
+      if (allLimbsDamaged(state.damage)) return promoteToFullFreeze(state);
       return false;
-    case "legs":
-      state.damage.legs = true;
+    case "leftLeg":
+      state.damage.leftLeg = true;
       state.launchPower = Math.min(state.launchPower, maxLaunchPower(state.damage));
+      if (allLimbsDamaged(state.damage)) return promoteToFullFreeze(state);
+      return false;
+    case "rightLeg":
+      state.damage.rightLeg = true;
+      state.launchPower = Math.min(state.launchPower, maxLaunchPower(state.damage));
+      if (allLimbsDamaged(state.damage)) return promoteToFullFreeze(state);
       return false;
   }
+}
+
+function promoteToFullFreeze(state: SharedPlayerState): true {
+  if (!state.damage.frozen) {
+    state.damage.frozen = true;
+    state.deaths += 1;
+  }
+  state.phase = "FROZEN";
+  state.grabbedBarPos = null;
+  return true;
 }
 
 export function spawnPosition(
@@ -247,6 +270,32 @@ export function resolveActorCollisions(
         other.pos.x += normal.x * otherPush;
         other.pos.y += normal.y * otherPush;
         other.pos.z += normal.z * otherPush;
+
+        // Preserve tangential momentum: kill only the component of relative
+        // velocity pointing INTO the collision. Otherwise both bodies keep
+        // ramming each other every frame and position correction oscillates
+        // (visually: actors lock together with no drift).
+        if (actor.vel && other.vel) {
+          const rvx = other.vel.x - actor.vel.x;
+          const rvy = other.vel.y - actor.vel.y;
+          const rvz = other.vel.z - actor.vel.z;
+          const approach = rvx * normal.x + rvy * normal.y + rvz * normal.z;
+          if (approach < 0) {
+            const actorShare = approach * (actorWeight / (actorWeight + otherWeight));
+            const otherShare = -approach * (otherWeight / (actorWeight + otherWeight));
+            if (actor.vel && actorWeight > 0) {
+              actor.vel.x += normal.x * actorShare;
+              actor.vel.y += normal.y * actorShare;
+              actor.vel.z += normal.z * actorShare;
+            }
+            if (other.vel && otherWeight > 0) {
+              other.vel.x += normal.x * otherShare;
+              other.vel.y += normal.y * otherShare;
+              other.vel.z += normal.z * otherShare;
+            }
+          }
+        }
+
         moved = true;
       }
     }

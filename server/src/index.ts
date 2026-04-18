@@ -14,7 +14,18 @@ async function main(): Promise<void> {
   const transport = new WebSocketTransport();
   const gameServer = new Server({
     transport,
+    publicAddress: `localhost:${PORT}`,
     express: (app) => {
+      app.use((req: any, res: any, next: () => void) => {
+        res.header("Access-Control-Allow-Origin", "http://localhost:5173");
+        res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+        res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        if (req.method === "OPTIONS") {
+          res.sendStatus(204);
+          return;
+        }
+        next();
+      });
       app.get("/health", (_req: unknown, res: { json: (body: unknown) => void }) => {
         res.json({
           ok: true,

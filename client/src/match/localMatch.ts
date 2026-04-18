@@ -507,6 +507,8 @@ export class LocalMatch {
   private rebuildBots(): void {
     this.dispose();
 
+    if (this.config.noBots) return;
+
     const fill = getSoloBotFill(this.config.teamSize, this.config.humanTeam);
     const makeName = (index: number): string => {
       const base = BOT_NAMES[index % BOT_NAMES.length];

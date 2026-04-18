@@ -59,6 +59,14 @@ export class FirstTimeTutorial {
 
   public constructor(private storage: StorageLike = resolveStorage()) {}
 
+  public forceRestart(): void {
+    this.storage.setItem(FIRST_TIME_TUTORIAL_STORAGE_KEY, "");
+    this.active = true;
+    this.stepIndex = 0;
+    this.attachedLastFrame = false;
+    this.shotFired = false;
+  }
+
   public beginRun(): void {
     if (this.isCompleted()) {
       this.active = false;

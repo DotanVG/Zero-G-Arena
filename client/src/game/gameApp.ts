@@ -35,6 +35,7 @@ export class App {
   private appMode: "menu" | "solo" | "online" = "menu";
   private onlineGameActive = false;
   private matchOver = false;
+  private helpVisible = false;
   private matchEndHandle: ReturnType<typeof setTimeout> | null = null;
   private playerUpdateTimer = 0;
   private latestOnlineSnapshot: MultiplayerRoomSnapshot | null = null;
@@ -261,6 +262,9 @@ export class App {
     this.menu.onPlayOnline = (selection) => {
       void this.startOnlineLobby(selection);
     };
+    this.menu.onPlayTutorial = (selection) => {
+      this.startTutorialMatch(selection);
+    };
 
     requestAnimationFrame((timestamp) => this.loop(timestamp));
   }
@@ -277,6 +281,10 @@ export class App {
       } else if (this.appMode !== "menu") {
         this.openSessionMenu();
       }
+    }
+
+    if (this.input.consumeHelpPressed() && this.appMode !== "menu") {
+      this.helpVisible = !this.helpVisible;
     }
 
     if (this.appMode === "solo") {
@@ -609,6 +617,7 @@ export class App {
         phase: this.player.phase,
         team: this.player.team,
       }),
+      helpVisible: this.helpVisible,
       dt,
       team: this.player.team,
     });
@@ -667,6 +676,7 @@ export class App {
         phase: this.player.phase,
         team: this.player.team,
       }),
+      helpVisible: this.helpVisible,
       dt,
       team: this.player.team,
     });
@@ -814,10 +824,16 @@ export class App {
 
   // ── Solo match start ────────────────────────────────────────────────────────
 
+  private startTutorialMatch(selection: PlaySelection): void {
+    this.tutorial.forceRestart();
+    this.startSoloMatch({ ...selection, teamSize: 1, noBots: true });
+  }
+
   private startSoloMatch(selection: PlaySelection): void {
     this.appMode = "solo";
     this.matchOver = false;
     this.onlineBreachReported = false;
+    this.helpVisible = false;
     this.tutorial.beginRun();
     if (this.matchEndHandle) {
       clearTimeout(this.matchEndHandle);
@@ -833,6 +849,7 @@ export class App {
       humanName: selection.name,
       humanTeam: 0,
       teamSize: selection.teamSize,
+      noBots: selection.noBots,
     });
 
     if (this.mobile) {

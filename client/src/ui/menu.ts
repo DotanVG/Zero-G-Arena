@@ -8,6 +8,7 @@ const MATCH_SIZE_STORAGE_KEY = 'orbital_match_size';
 
 export interface PlaySelection {
   name: string;
+  noBots?: boolean;
   teamSize: MatchTeamSize;
 }
 
@@ -17,6 +18,7 @@ export class MainMenu {
 
   public onPlaySolo: ((selection: PlaySelection) => void) | null = null;
   public onPlayOnline: ((selection: PlaySelection) => void) | null = null;
+  public onPlayTutorial: ((selection: PlaySelection) => void) | null = null;
 
   public show(): void {
     this.hide();
@@ -54,6 +56,11 @@ export class MainMenu {
       if (!this.checkNameBeforePlay(elements)) return;
       const selection = this.saveSelection();
       this.fadeOut(() => this.onPlayOnline?.(selection));
+    });
+    elements.playTutorialButton.addEventListener('click', () => {
+      if (!this.checkNameBeforePlay(elements)) return;
+      const name = this.menu?.nameInput.value.trim() || 'Pilot';
+      this.fadeOut(() => this.onPlayTutorial?.({ name, teamSize: 1, noBots: true }));
     });
 
     // Enter anywhere in the menu triggers PLAY SOLO (quickest path).

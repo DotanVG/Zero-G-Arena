@@ -5,6 +5,7 @@ export type MatchTeamSize = (typeof MATCH_TEAM_SIZES)[number];
 export interface SoloMatchConfig {
   humanName: string;
   humanTeam: 0 | 1;
+  noBots?: boolean;
   teamSize: MatchTeamSize;
 }
 

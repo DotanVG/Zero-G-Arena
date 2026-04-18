@@ -37,6 +37,25 @@ const HUD_MARKUP = `
 
   <div id="hud-round-end" class="ob-round-end"></div>
   <div id="hud-tab" class="ob-scoreboard-overlay"></div>
+
+  <div id="hud-help" class="ob-help-overlay">
+    <div class="ob-help-panel">
+      <div class="ob-help-header">
+        <div class="ob-help-title">Controls</div>
+        <div class="ob-help-close">[H] Close</div>
+      </div>
+      <div class="ob-help-grid">
+        <div class="ob-help-row"><span class="ob-help-key">LMB</span><span class="ob-help-desc">Freeze shot</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">E</span><span class="ob-help-desc">Grab bar</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">Space + Mouse ↕</span><span class="ob-help-desc">Aim launch power</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">Space release</span><span class="ob-help-desc">Slingshot into zero-G</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">Tab</span><span class="ob-help-desc">Scoreboard</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">Esc</span><span class="ob-help-desc">Session menu</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">V</span><span class="ob-help-desc">Third-person toggle</span></div>
+        <div class="ob-help-row ob-help-row--goal">Float through the enemy portal to breach and score</div>
+      </div>
+    </div>
+  </div>
 `;
 
 const HUD_CSS = `
@@ -663,6 +682,86 @@ const HUD_CSS = `
     }
   }
 
+  /* ── HELP OVERLAY ── */
+  .ob-help-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 80;
+    pointer-events: auto;
+  }
+  .ob-help-overlay.ob-help-visible {
+    display: flex;
+  }
+  .ob-help-panel {
+    background: rgba(7, 10, 18, 0.97);
+    border: 1px solid rgba(210, 220, 240, 0.16);
+    padding: 24px 28px;
+    min-width: 320px;
+    max-width: min(480px, 92vw);
+  }
+  .ob-help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(210, 220, 240, 0.08);
+  }
+  .ob-help-title {
+    font-family: "Cormorant Garamond", serif;
+    font-size: 24px;
+    font-weight: 300;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #e8ecf4;
+  }
+  .ob-help-close {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--hud-muted);
+    text-transform: uppercase;
+  }
+  .ob-help-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .ob-help-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .ob-help-key {
+    min-width: 120px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(210, 220, 240, 0.1);
+    color: var(--hud-cyan);
+    text-align: center;
+    flex-shrink: 0;
+    font-size: 9px;
+  }
+  .ob-help-desc {
+    color: var(--hud-muted);
+  }
+  .ob-help-row--goal {
+    margin-top: 6px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(210, 220, 240, 0.06);
+    color: var(--hud-magenta);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .ob-score-pill,
     .ob-round-timer,
@@ -708,6 +807,7 @@ export interface HudElements {
   tutorialBody: HTMLDivElement;
   roundEnd: HTMLDivElement;
   tab: HTMLDivElement;
+  help: HTMLDivElement;
 }
 
 export function createHudView(): HudElements {
@@ -742,5 +842,6 @@ export function createHudView(): HudElements {
     tutorialBody: q("hud-tutorial-body"),
     roundEnd: q("hud-round-end"),
     tab: q("hud-tab"),
+    help: q("hud-help"),
   };
 }

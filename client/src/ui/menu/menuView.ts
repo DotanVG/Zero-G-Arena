@@ -344,6 +344,70 @@ const CSS = `
   .ob-btn-corner.ob-bl { bottom: 4px; left: 4px;  border-right: none; border-top:    none; }
   .ob-btn-corner.ob-br { bottom: 4px; right: 4px; border-left:  none; border-top:    none; }
 
+  /* ── TUTORIAL BUTTON ── */
+  .ob-tutorial-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    max-width: 880px;
+    padding: 16px 38px;
+    background: rgba(255, 125, 248, 0.06);
+    border: 1px solid rgba(255, 125, 248, 0.28);
+    color: var(--ob-fg);
+    font-family: var(--ob-mono);
+    text-transform: uppercase;
+    cursor: none;
+    overflow: hidden;
+    transition: border-color .25s, background .25s, transform .25s;
+  }
+  .ob-tutorial-btn::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--mx,50%) var(--my,50%), var(--ob-magenta-soft), transparent 60%);
+    opacity: 0;
+    transition: opacity .3s;
+    z-index: 1;
+  }
+  .ob-tutorial-btn:hover {
+    border-color: var(--ob-magenta);
+    background: rgba(255, 125, 248, 0.1);
+    transform: translateY(-1px);
+  }
+  .ob-tutorial-btn:hover::before { opacity: 1; }
+  .ob-tutorial-btn-main {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    position: relative;
+    z-index: 2;
+  }
+  .ob-tutorial-btn-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    color: var(--ob-magenta);
+  }
+  .ob-tutorial-btn-sub {
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--ob-fg-faint);
+  }
+  .ob-tutorial-btn-arrow {
+    font-family: var(--ob-serif);
+    font-size: 20px;
+    color: var(--ob-magenta);
+    letter-spacing: 0;
+    position: relative;
+    z-index: 2;
+    transition: transform .3s;
+  }
+  .ob-tutorial-btn:hover .ob-tutorial-btn-arrow { transform: translateX(6px); }
+
   /* hidden select keeps controller wiring intact */
   .ob-match-select-hidden { display: none; }
 
@@ -384,6 +448,7 @@ export interface MenuElements {
   matchSizeSelect: HTMLSelectElement;
   playSoloButton: HTMLButtonElement;
   playOnlineButton: HTMLButtonElement;
+  playTutorialButton: HTMLButtonElement;
 }
 
 /* ─────────────────────────────────────────────
@@ -534,12 +599,24 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
           <div class="ob-name-error" id="menu-name-error" aria-live="polite"></div>
         </div>
 
+        <button id="btn-play-tutorial" class="ob-tutorial-btn">
+          <span class="ob-btn-corner ob-tl" style="border-color:var(--ob-magenta);opacity:.4;"></span>
+          <span class="ob-btn-corner ob-tr" style="border-color:var(--ob-magenta);opacity:.4;"></span>
+          <span class="ob-btn-corner ob-bl" style="border-color:var(--ob-magenta);opacity:.4;"></span>
+          <span class="ob-btn-corner ob-br" style="border-color:var(--ob-magenta);opacity:.4;"></span>
+          <span class="ob-tutorial-btn-main">
+            <span class="ob-tutorial-btn-label">Tutorial</span>
+            <span class="ob-tutorial-btn-sub">Empty Arena · Bots Off · First Flight Guide</span>
+          </span>
+          <span class="ob-tutorial-btn-arrow">→</span>
+        </button>
+
         <div class="ob-match-grid" id="ob-match-grid">
-          ${cardHtml(1,  "Skirmish",   "Bots off")}
-          ${cardHtml(2,  "Duos",       "Bots off")}
-          ${cardHtml(5,  "Squad Clash","8 bots")}
-          ${cardHtml(10, "Arena Rush", "18 bots")}
-          ${cardHtml(20, "Zero-G War", "38 bots")}
+          ${cardHtml(1,  "Skirmish",   "1 bot")}
+          ${cardHtml(2,  "Duos",       "3 bots")}
+          ${cardHtml(5,  "Squad Clash","9 bots")}
+          ${cardHtml(10, "Arena Rush", "19 bots")}
+          ${cardHtml(20, "Zero-G War", "39 bots")}
         </div>
 
         <!-- Hidden select keeps the controller's .value + change listener working -->
@@ -590,12 +667,13 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
 
   return {
     container,
-    root:           container.querySelector<HTMLElement>("#menu-root")!,
-    nameInput:      container.querySelector<HTMLInputElement>("#menu-name")!,
-    nameError:      container.querySelector<HTMLElement>("#menu-name-error")!,
-    matchSizeSelect: matchSelect,
-    playSoloButton:  container.querySelector<HTMLButtonElement>("#btn-play-solo")!,
-    playOnlineButton:container.querySelector<HTMLButtonElement>("#btn-play-online")!,
+    root:              container.querySelector<HTMLElement>("#menu-root")!,
+    nameInput:         container.querySelector<HTMLInputElement>("#menu-name")!,
+    nameError:         container.querySelector<HTMLElement>("#menu-name-error")!,
+    matchSizeSelect:   matchSelect,
+    playSoloButton:    container.querySelector<HTMLButtonElement>("#btn-play-solo")!,
+    playOnlineButton:  container.querySelector<HTMLButtonElement>("#btn-play-online")!,
+    playTutorialButton:container.querySelector<HTMLButtonElement>("#btn-play-tutorial")!,
   };
 }
 
@@ -789,7 +867,7 @@ function initMenuFx(container: HTMLElement): void {
   mo.observe(document.body, { childList: true });
 
   // ── 6. Button radial hover ──
-  root.querySelectorAll<HTMLElement>(".ob-btn, .ob-match-card").forEach((el) => {
+  root.querySelectorAll<HTMLElement>(".ob-btn, .ob-match-card, .ob-tutorial-btn").forEach((el) => {
     el.addEventListener("mousemove", (e: MouseEvent) => {
       const r = el.getBoundingClientRect();
       el.style.setProperty("--mx", ((e.clientX - r.left) / r.width  * 100) + "%");
@@ -800,6 +878,9 @@ function initMenuFx(container: HTMLElement): void {
     el.addEventListener("mouseenter", () => cursorEl?.classList.add("ob-hot"));
     el.addEventListener("mouseleave", () => cursorEl?.classList.remove("ob-hot"));
   });
+  const tutorialBtn = root.querySelector<HTMLElement>(".ob-tutorial-btn");
+  tutorialBtn?.addEventListener("mouseenter", () => cursorEl?.classList.add("ob-hot"));
+  tutorialBtn?.addEventListener("mouseleave", () => cursorEl?.classList.remove("ob-hot"));
 
   // ── 7. UTC clock ──
   const clockEl = root.querySelector<HTMLElement>("#ob-clock");

@@ -76,7 +76,7 @@ const CSS = `
 
   .ob-session-panel {
     width: min(620px, calc(100vw - 36px));
-    max-height: calc(100vh - 36px);
+    max-height: calc(100dvh - 36px);
     overflow: auto;
     border-radius: 0;
     border: 1px solid rgba(210, 220, 240, 0.16);
@@ -277,6 +277,7 @@ const CSS = `
 
     .ob-session-root {
       padding: 10px;
+      padding-top: calc(10px + env(safe-area-inset-top, 0px));
       padding-bottom: max(70px, calc(54px + env(safe-area-inset-bottom, 0px)));
       align-items: flex-start;
     }
@@ -296,6 +297,7 @@ const CSS = `
   @media (max-height: 500px) {
     .ob-session-root {
       padding: 8px;
+      padding-top: calc(8px + env(safe-area-inset-top, 0px));
       padding-bottom: max(54px, calc(44px + env(safe-area-inset-bottom, 0px)));
       align-items: flex-start;
     }

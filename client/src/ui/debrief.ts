@@ -32,7 +32,7 @@ const CSS = `
 
   .ob-debrief-wrap {
     width: min(1100px, 94vw);
-    max-height: calc(100vh - 36px);
+    max-height: calc(100dvh - 36px);
     overflow: auto;
     display: grid;
     gap: 22px;
@@ -169,9 +169,10 @@ const CSS = `
   }
 
   /* ── Mobile portrait ── */
-  @media (max-width: 640px) {
+  @media (max-width: 640px) and (orientation: portrait) {
     .ob-debrief-root {
       padding: 12px 10px;
+      padding-top: calc(12px + env(safe-area-inset-top, 0px));
       padding-bottom: max(80px, calc(60px + env(safe-area-inset-bottom, 0px)));
       align-items: flex-start;
     }
@@ -188,16 +189,28 @@ const CSS = `
     .ob-debrief-actions { flex-direction: column; gap: 8px; }
     .ob-debrief-btn { padding: 14px 16px; font-size: 9px; letter-spacing: 4px; }
 
-    /* Reorder: awards+actions above scoreboard */
+    /* Reorder: actions, awards, then scoreboard */
     .ob-debrief-grid { display: flex; flex-direction: column; }
-    .ob-debrief-grid > .ob-debrief-panel { order: 2; }
-    .ob-debrief-grid > div:not(.ob-debrief-panel) { order: 1; }
+    .ob-debrief-side {
+      display: flex;
+      flex-direction: column;
+      order: 0;
+    }
+    .ob-debrief-actions {
+      order: -1;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    .ob-awards { order: 0; }
+    .ob-debrief-grid > .ob-debrief-panel { order: 1; }
+    #debrief-play-again { order: -1; }
   }
 
   /* ── Mobile landscape ── */
   @media (max-height: 500px) and (max-width: 900px) {
     .ob-debrief-root {
       padding: 8px 10px;
+      padding-top: calc(8px + env(safe-area-inset-top, 0px));
       padding-bottom: max(60px, calc(44px + env(safe-area-inset-bottom, 0px)));
       align-items: flex-start;
     }
@@ -335,7 +348,7 @@ export class DebriefScreen {
             </table>
           </div>
 
-          <div>
+          <div class="ob-debrief-side">
             <div class="ob-awards">${awards}</div>
             <div class="ob-debrief-actions">
               <button class="ob-debrief-btn" id="debrief-main-menu">Main Menu →</button>

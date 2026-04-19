@@ -127,7 +127,7 @@ const CSS = `
   .ob-topbar {
     position: fixed; top: 0; left: 0; right: 0; z-index: 10;
     display: flex; justify-content: space-between; align-items: center;
-    padding: 22px 40px 0;
+    padding: calc(22px + env(safe-area-inset-top, 0px)) 40px 0;
     font-family: var(--ob-mono); font-size: 10px; letter-spacing: 3px;
     color: var(--ob-fg-dim); text-transform: uppercase;
     pointer-events: none;
@@ -150,7 +150,7 @@ const CSS = `
   .ob-bottombar {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
     display: flex; justify-content: space-between; align-items: flex-end;
-    padding: 0 40px 18px;
+    padding: 0 40px max(18px, calc(18px + env(safe-area-inset-bottom, 0px)));
     font-family: var(--ob-mono); font-size: 9px; letter-spacing: 3px;
     color: var(--ob-fg-faint); text-transform: uppercase;
     pointer-events: none;
@@ -421,14 +421,15 @@ const CSS = `
     .ob-callsign-box { min-width: 0; width: 90vw; }
     .menu-root       { cursor: auto; overflow-y: auto; place-items: start; }
     .ob-cursor       { display: none; }
-    .ob-topbar  { padding-left: 16px; padding-right: 16px; padding-top: 14px; }
+    .ob-topbar  { padding-left: 16px; padding-right: 16px; padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
     .ob-bottombar { padding-left: 16px; padding-right: 16px;
                     padding-bottom: max(14px, env(safe-area-inset-bottom, 14px)); }
     .ob-hud-corner { display: none; }
     .ob-main-wrap {
       gap: 18px;
       padding: 0 0 max(70px, calc(50px + env(safe-area-inset-bottom, 0px)));
-      padding-top: 64px;
+      padding-top: calc(64px + env(safe-area-inset-top, 0px));
+      padding-left: 4vw;
       width: min(640px, 96vw);
     }
     .ob-title { font-size: clamp(36px, 10vw, 64px); }
@@ -452,7 +453,9 @@ const CSS = `
     .ob-main-wrap {
       gap: 12px;
       padding: 52px 0 max(60px, calc(44px + env(safe-area-inset-bottom, 0px)));
+      padding-top: calc(52px + env(safe-area-inset-top, 0px));
     }
+    .menu-root { overflow-y: auto; }
     .ob-title  { font-size: clamp(28px, 6vw, 56px); }
     .ob-subtitle, .ob-tag { display: none; }
     .ob-callsign-label { display: none; }

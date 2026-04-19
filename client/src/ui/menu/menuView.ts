@@ -203,15 +203,6 @@ const CSS = `
     transition: transform .4s cubic-bezier(.2,.7,.2,1), text-shadow .4s;
     will-change: transform;
   }
-  .ob-title-waves {
-    position: absolute;
-    left: -6%; right: -6%; top: -40%; bottom: -40%;
-    pointer-events: none; z-index: 0;
-    opacity: 0; transition: opacity .45s ease;
-    mix-blend-mode: screen; filter: blur(.4px);
-  }
-  .ob-title:hover .ob-title-waves { opacity: 1; }
-
   .ob-subtitle {
     font-family: var(--ob-mono); font-size: 11px; letter-spacing: 6px;
     color: var(--ob-fg-dim); text-transform: uppercase;
@@ -614,10 +605,7 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
       <div class="ob-main-wrap">
         <div class="ob-tag">ZERO-G ARENA · STANDING BY</div>
 
-        <h1 class="ob-title" id="ob-title">
-          <canvas class="ob-title-waves" id="ob-title-waves"></canvas>
-          ORBITAL BREACH
-        </h1>
+        <h1 class="ob-title" id="ob-title">ORBITAL BREACH</h1>
 
         <div class="ob-subtitle">
           <span class="ob-pulse"></span>

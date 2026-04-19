@@ -144,6 +144,10 @@ const CSS = `
   }
 
   .ob-session-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
     position: relative;
     min-height: 50px;
     border-radius: 0;
@@ -487,7 +491,7 @@ export class SessionMenu {
     this.mainMenuButton.textContent = config.mainMenuLabel ?? "Return To Main Menu";
 
     if (config.resumeLabel) {
-      this.resumeButton.style.display = "inline-flex";
+      this.resumeButton.style.display = "flex";
       this.resumeButton.textContent = config.resumeLabel;
     } else {
       this.resumeButton.style.display = "none";

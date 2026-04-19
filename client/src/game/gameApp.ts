@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS, MATCH_END_DELAY } from "../../../shared/constants";
+import { GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS } from "../../../shared/constants";
 import { generateArenaLayout } from "../../../shared/arena-gen";
 import type { MultiplayerRoomSnapshot } from "../../../shared/multiplayer";
 import { Arena } from "../arena/arena";
@@ -40,6 +40,7 @@ export class App {
   private helpVisible = false;
   private lastSoloSelection: PlaySelection | null = null;
   private matchEndHandle: ReturnType<typeof setTimeout> | null = null;
+  private pendingOnlineDebrief: DebriefData | null = null;
   private playerUpdateTimer = 0;
   private latestOnlineSnapshot: MultiplayerRoomSnapshot | null = null;
   private previousOnlinePhase: MultiplayerRoomSnapshot["phase"] | null = null;
@@ -131,8 +132,18 @@ export class App {
       this.applySessionSettings(settings);
     };
 
-    this.debrief.onMainMenu = () => this.returnToMenuFromSolo();
+    this.debrief.onMainMenu = () => {
+      if (this.appMode === "online") {
+        void this.returnToMenuFromOnline();
+        return;
+      }
+      this.returnToMenuFromSolo();
+    };
     this.debrief.onPlayAgain = () => {
+      if (this.appMode === "online") {
+        this.returnToOnlineLobbyFromDebrief();
+        return;
+      }
       if (this.lastSoloSelection) {
         this.startSoloMatch(this.lastSoloSelection);
       } else {
@@ -211,6 +222,7 @@ export class App {
         this.hud.showRoundEnd(
           `${label} WINS THE MATCH  ${event.finalScore.team0} - ${event.finalScore.team1}`,
         );
+        this.pendingOnlineDebrief = this.buildOnlineDebrief(event.matchWinner, event.finalScore);
         return;
       }
 
@@ -605,6 +617,12 @@ export class App {
     if (snap) {
       this.multiplayer.render(snap);
     }
+
+    if (this.pendingOnlineDebrief) {
+      const debrief = this.pendingOnlineDebrief;
+      this.pendingOnlineDebrief = null;
+      this.showMatchDebrief(debrief);
+    }
   }
 
   // ── HUD updates ─────────────────────────────────────────────────────────────
@@ -753,15 +771,9 @@ export class App {
   ): void {
     this.matchOver = true;
     this.round.cancelPendingRestart();
-    const label = winningTeam === 0 ? "CYAN" : "MAGENTA";
-    this.hud.showRoundEnd(
-      `${label} WINS THE MATCH  ${finalScore.team0} - ${finalScore.team1}`,
-    );
     if (this.matchEndHandle) clearTimeout(this.matchEndHandle);
-    this.matchEndHandle = setTimeout(() => {
-      this.matchEndHandle = null;
-      this.showSoloDebrief(winningTeam, finalScore);
-    }, MATCH_END_DELAY * 1000);
+    this.matchEndHandle = null;
+    this.showSoloDebrief(winningTeam, finalScore);
   }
 
   private showSoloDebrief(
@@ -804,10 +816,7 @@ export class App {
       matchLabel: `${sizeLabelMap[teamSize] ?? "Solo"} · ${finalScore.team0} – ${finalScore.team1}`,
     };
 
-    this.hud.setVisible(false);
-    this.hud.hideRoundEnd();
-    this.killFeed.setVisible(false);
-    this.debrief.show(debriefData);
+    this.showMatchDebrief(debriefData);
   }
 
   private returnToMenuFromSolo(): void {
@@ -830,7 +839,7 @@ export class App {
   }
 
   private openSessionMenu(): void {
-    if (this.appMode === "menu") return;
+    if (this.appMode === "menu" || this.debrief.isVisible()) return;
 
     const inLiveMatch = this.appMode === "solo" || this.onlineGameActive;
     const title = this.appMode === "solo"
@@ -954,6 +963,7 @@ export class App {
     this.onlinePlayerName = selection.name;
     this.onlineGameActive = false;
     this.onlineBreachReported = false;
+    this.pendingOnlineDebrief = null;
     this.previousOnlinePhase = null;
     this.projectiles.clear();
     this.hud.setVisible(false);
@@ -982,9 +992,11 @@ export class App {
 
   private async returnToMenuFromOnline(): Promise<void> {
     this.closeSessionMenu();
+    this.debrief.hide();
     this.appMode = "menu";
     this.onlineGameActive = false;
     this.onlineBreachReported = false;
+    this.pendingOnlineDebrief = null;
     this.onlineMatch.dispose();
     this.multiplayer.hide();
     this.hud.setVisible(false);
@@ -1006,6 +1018,79 @@ export class App {
   }
 
   // ── Weapon fire (solo) ──────────────────────────────────────────────────────
+
+  private showMatchDebrief(data: DebriefData): void {
+    if (this.matchEndHandle) {
+      clearTimeout(this.matchEndHandle);
+      this.matchEndHandle = null;
+    }
+
+    this.sessionMenu.close();
+    this.input.exitPointerLock();
+    this.input.setUiBlocked(true);
+    this.mobileControls?.hide();
+    this.input.setMobileControlsActive(false);
+    this.sessionMenu.setLauncherVisible(false);
+    this.hud.setVisible(false);
+    this.hud.hideRoundEnd();
+    this.killFeed.setVisible(false);
+    this.debrief.show(data);
+  }
+
+  private buildOnlineDebrief(
+    winningTeam: 0 | 1,
+    finalScore: { team0: number; team1: number },
+  ): DebriefData {
+    const snapshot = this.latestOnlineSnapshot;
+    const sessionId = this.net.getSessionId() ?? "local-player";
+    const playerTeam = snapshot?.selfTeam ?? this.player.team;
+    const teamSize = snapshot?.teamSize ?? 1;
+    const sizeLabelMap: Record<number, string> = {
+      1: "1v1 Duel", 2: "2v2 Duos", 5: "5v5 Squads", 10: "10v10 Rush", 20: "20v20 War",
+    };
+
+    const players: DebriefPlayer[] = (snapshot?.actors ?? []).map((actor) => ({
+      id: actor.id,
+      name: actor.name,
+      team: actor.team,
+      breaches: actor.kills,
+      frozen: actor.deaths,
+      isBot: actor.isBot,
+      isSelf: actor.id === sessionId,
+    }));
+
+    if (players.length === 0) {
+      players.push({
+        id: sessionId,
+        name: this.onlinePlayerName,
+        team: playerTeam,
+        breaches: this.player.kills,
+        frozen: this.player.deaths,
+        isBot: false,
+        isSelf: true,
+      });
+    }
+
+    return {
+      winningTeam,
+      score: finalScore,
+      players,
+      playerTeam,
+      matchLabel: `${sizeLabelMap[teamSize] ?? `${teamSize}v${teamSize}`} Online · ${finalScore.team0} – ${finalScore.team1}`,
+    };
+  }
+
+  private returnToOnlineLobbyFromDebrief(): void {
+    this.input.setUiBlocked(false);
+    this.sessionMenu.setLauncherVisible(true);
+
+    if (this.latestOnlineSnapshot) {
+      this.multiplayer.render(this.latestOnlineSnapshot);
+      return;
+    }
+
+    this.multiplayer.show();
+  }
 
   private tickWeaponFire(): void {
     const inZeroG = this.player.phase === "FLOATING"

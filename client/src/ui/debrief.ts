@@ -293,6 +293,12 @@ export class DebriefScreen {
       ?.addEventListener("click", () => { this.hide(); this.onMainMenu?.(); });
     this.root.querySelector<HTMLButtonElement>("#debrief-play-again")
       ?.addEventListener("click", () => { this.hide(); this.onPlayAgain?.(); });
+
+    const focusTarget = this.root.querySelector<HTMLButtonElement>("#debrief-play-again")
+      ?? this.root.querySelector<HTMLButtonElement>("#debrief-main-menu");
+    requestAnimationFrame(() => {
+      focusTarget?.focus({ preventScroll: true });
+    });
   }
 
   public hide(): void {

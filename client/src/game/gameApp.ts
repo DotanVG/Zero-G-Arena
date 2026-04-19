@@ -293,6 +293,9 @@ export class App {
     this.menu.onPlayOnline = (selection) => {
       void this.startOnlineLobby(selection);
     };
+    this.menu.onOpenSettings = () => {
+      this.openSessionMenu();
+    };
     this.menu.onPlayTutorial = (selection) => {
       this.startTutorialMatch(selection);
     };
@@ -839,24 +842,32 @@ export class App {
   }
 
   private openSessionMenu(): void {
-    if (this.appMode === "menu" || this.debrief.isVisible()) return;
+    if (this.sessionMenu.isOpen() || this.debrief.isVisible()) return;
 
+    const inMenu = this.appMode === "menu";
     const inLiveMatch = this.appMode === "solo" || this.onlineGameActive;
-    const title = this.appMode === "solo"
-      ? "Solo Flight Menu"
-      : this.onlineGameActive
-        ? "Live Match Menu"
-        : "Lobby Menu";
-    const subtitle = inLiveMatch
-      ? this.mobile
-        ? "Resume when you are ready, or return straight to the main menu."
-        : "Resume when you are ready, then click the arena to recapture mouse look."
-      : "Step back to the room shell or return all the way to the main menu.";
-    const resumeLabel = this.appMode === "solo"
-      ? "Resume Match"
-      : this.onlineGameActive
+    const title = inMenu
+      ? "Flight Settings"
+      : this.appMode === "solo"
+        ? "Solo Flight Menu"
+        : this.onlineGameActive
+          ? "Live Match Menu"
+          : "Lobby Menu";
+    const subtitle = inMenu
+      ? "Tune mouse and audio before launch. Close settings to continue from the main menu."
+      : inLiveMatch
+        ? this.mobile
+          ? "Resume when you are ready, or return straight to the main menu."
+          : "Resume when you are ready, then click the arena to recapture mouse look."
+        : "Step back to the room shell or return all the way to the main menu.";
+    const resumeLabel = inMenu
+      ? "Close Settings"
+      : this.appMode === "solo"
         ? "Resume Match"
-        : "Back To Lobby";
+        : this.onlineGameActive
+          ? "Resume Match"
+          : "Back To Lobby";
+    const mainMenuLabel = inMenu ? null : "Return To Main Menu";
 
     this.input.exitPointerLock();
     this.input.setUiBlocked(true);
@@ -869,7 +880,7 @@ export class App {
       title,
       subtitle,
       resumeLabel,
-      mainMenuLabel: "Return To Main Menu",
+      mainMenuLabel,
     });
   }
 

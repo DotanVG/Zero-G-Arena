@@ -18,6 +18,7 @@ export class MainMenu {
 
   public onPlaySolo: ((selection: PlaySelection) => void) | null = null;
   public onPlayOnline: ((selection: PlaySelection) => void) | null = null;
+  public onOpenSettings: (() => void) | null = null;
   public onPlayTutorial: ((selection: PlaySelection) => void) | null = null;
 
   public show(): void {
@@ -57,6 +58,9 @@ export class MainMenu {
       const selection = this.saveSelection();
       this.fadeOut(() => this.onPlayOnline?.(selection));
     });
+    elements.openSettingsButton.addEventListener('click', () => {
+      this.onOpenSettings?.();
+    });
     elements.playTutorialButton.addEventListener('click', () => {
       if (!this.checkNameBeforePlay(elements)) return;
       const name = this.menu?.nameInput.value.trim() || 'Pilot';
@@ -67,6 +71,13 @@ export class MainMenu {
     // Using the root container so it also fires while the name input is focused.
     elements.root.addEventListener('keydown', (ev: KeyboardEvent) => {
       if (ev.key !== 'Enter') return;
+      const target = ev.target;
+      if (
+        target instanceof HTMLElement
+        && (target.closest('button') || target.closest('select'))
+      ) {
+        return;
+      }
       ev.preventDefault();
       elements.playSoloButton.click();
     });

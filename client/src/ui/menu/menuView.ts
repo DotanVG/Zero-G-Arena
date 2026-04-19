@@ -1,6 +1,7 @@
 import { isTouchDevice } from "../../platform";
 import type { MatchTeamSize } from "../../../../shared/match";
 import { injectDesignTokens } from "../designTokens";
+import { SESSION_MENU_GEAR_ICON } from "../sessionMenu";
 
 /* ─────────────────────────────────────────────
    CSS
@@ -301,9 +302,21 @@ const CSS = `
   }
 
   /* ── LAUNCH BUTTONS ── */
-  .ob-launch-row { display: flex; gap: 16px; }
+  .ob-launch-row,
+  .ob-settings-row {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    width: 100%;
+  }
+  .ob-settings-row { margin-top: -4px; }
   .ob-btn {
     position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: min(194px, 100%);
+    min-height: 56px;
     padding: 18px 38px;
     background: rgba(10,14,26,.55); backdrop-filter: blur(8px);
     border: 1px solid var(--ob-line-2); color: var(--ob-fg);
@@ -312,19 +325,39 @@ const CSS = `
     transition: border-color .25s, background .25s, color .25s, transform .25s;
     overflow: hidden;
   }
-  .ob-btn-label { position: relative; z-index: 2; display: flex; align-items: center; gap: 12px; }
+  .ob-btn-label {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+  }
   .ob-btn-arrow { font-family: var(--ob-serif); font-size: 16px; letter-spacing: 0; transition: transform .3s; }
+  .ob-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    transition: transform .3s ease;
+  }
+  .ob-btn-icon svg { width: 16px; height: 16px; }
   .ob-btn::before {
     content: ""; position: absolute; inset: 0;
     opacity: 0; transition: opacity .3s; z-index: 1;
   }
   .ob-btn-primary::before  { background: radial-gradient(circle at var(--mx,50%) var(--my,50%), var(--ob-magenta-soft), transparent 60%); }
   .ob-btn-secondary::before{ background: radial-gradient(circle at var(--mx,50%) var(--my,50%), var(--ob-cyan-soft),    transparent 60%); }
+  .ob-btn-utility::before  { background: radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(140,225,255,.12), transparent 62%); }
   .ob-btn:hover { border-color: rgba(255,255,255,.4); transform: translateY(-1px); }
   .ob-btn:hover::before { opacity: 1; }
   .ob-btn:hover .ob-btn-arrow { transform: translateX(6px); }
+  .ob-btn:hover .ob-btn-icon { transform: rotate(18deg) scale(1.06); }
   .ob-btn-primary:hover  { color: oklch(0.88 0.12 60);  border-color: var(--ob-magenta); }
   .ob-btn-secondary:hover{ color: var(--ob-cyan); border-color: var(--ob-cyan); }
+  .ob-btn-utility:hover  { color: var(--ob-cyan); border-color: rgba(140,225,255,.42); }
   .ob-btn:focus-visible { outline: 2px solid var(--ob-cyan); outline-offset: 3px; }
   .ob-btn-corner {
     position: absolute; width: 8px; height: 8px; z-index: 3;
@@ -408,7 +441,8 @@ const CSS = `
   }
   @media (max-width: 640px) {
     .ob-match-grid   { grid-template-columns: repeat(3, 1fr); }
-    .ob-launch-row   { flex-direction: column; }
+    .ob-launch-row   { flex-direction: column; align-items: center; }
+    .ob-settings-row { margin-top: 0; }
     .ob-callsign-box { min-width: 0; width: 90vw; }
     .menu-root       { cursor: auto; overflow-y: auto; align-items: start; }
     .ob-cursor       { display: none; }
@@ -427,7 +461,7 @@ const CSS = `
     .ob-card-size  { font-size: 22px; }
     .ob-tutorial-btn { padding: 12px 18px; }
     .ob-tutorial-btn-sub { display: none; }
-    .ob-btn { padding: 16px 24px; }
+    .ob-btn { width: min(320px, 100%); padding: 16px 24px; }
   }
   @media (max-width: 420px) {
     .ob-match-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -455,7 +489,7 @@ const CSS = `
     .ob-card-bots  { display: none; }
     .ob-tutorial-btn { padding: 10px 14px; }
     .ob-tutorial-btn-sub { display: none; }
-    .ob-btn { padding: 12px 20px; }
+    .ob-btn { width: min(280px, 100%); padding: 12px 20px; }
   }
   @media (max-height: 700px) and (min-height: 501px) {
     .ob-main-wrap { gap: 18px; padding: 60px 0 40px; }
@@ -484,6 +518,7 @@ export interface MenuElements {
   matchSizeSelect: HTMLSelectElement;
   playSoloButton: HTMLButtonElement;
   playOnlineButton: HTMLButtonElement;
+  openSettingsButton: HTMLButtonElement;
   playTutorialButton: HTMLButtonElement;
 }
 
@@ -520,12 +555,15 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
       </button>`;
   }
 
-  function btn(id: string, mod: string, label: string): string {
+  function btn(id: string, mod: string, label: string, iconHtml?: string): string {
+    const adornment = iconHtml
+      ? `<span class="ob-btn-icon">${iconHtml}</span>`
+      : `<span class="ob-btn-arrow">&rarr;</span>`;
     return `
       <button class="ob-btn ob-btn-${mod}" id="${id}">
         <span class="ob-btn-corner ob-tl"></span><span class="ob-btn-corner ob-tr"></span>
         <span class="ob-btn-corner ob-bl"></span><span class="ob-btn-corner ob-br"></span>
-        <span class="ob-btn-label">${label} <span class="ob-btn-arrow">→</span></span>
+        <span class="ob-btn-label">${label} ${adornment}</span>
       </button>`;
   }
 
@@ -665,6 +703,9 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
           ${btn("btn-play-solo",   "primary",   "Engage Solo")}
           ${btn("btn-play-online", "secondary", "Join Online")}
         </div>
+        <div class="ob-settings-row">
+          ${btn("btn-open-settings", "utility", "Settings", SESSION_MENU_GEAR_ICON)}
+        </div>
       </div>
 
       <!-- BOTTOMBAR -->
@@ -706,6 +747,7 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
     matchSizeSelect:   matchSelect,
     playSoloButton:    container.querySelector<HTMLButtonElement>("#btn-play-solo")!,
     playOnlineButton:  container.querySelector<HTMLButtonElement>("#btn-play-online")!,
+    openSettingsButton:container.querySelector<HTMLButtonElement>("#btn-open-settings")!,
     playTutorialButton:container.querySelector<HTMLButtonElement>("#btn-play-tutorial")!,
   };
 }

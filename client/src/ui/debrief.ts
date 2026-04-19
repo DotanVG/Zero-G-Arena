@@ -195,13 +195,17 @@ const CSS = `
       display: flex;
       flex-direction: column;
       order: 0;
+      width: 100%;
     }
     .ob-debrief-actions {
       order: -1;
       margin-top: 0;
       margin-bottom: 8px;
+      width: 100%;
     }
-    .ob-awards { order: 0; }
+    .ob-debrief-btn { width: 100%; justify-content: center; }
+    .ob-awards { order: 0; width: 100%; }
+    .ob-award { width: 100%; }
     .ob-debrief-grid > .ob-debrief-panel { order: 1; }
     #debrief-play-again { order: -1; }
   }
@@ -222,7 +226,9 @@ const CSS = `
     .ob-debrief-head { padding-bottom: 10px; gap: 8px; }
     .ob-debrief-team-score .ob-ds-num { font-size: 44px; }
     .ob-debrief-verdict { font-size: 20px; }
-    .ob-debrief-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .ob-debrief-grid { display: flex; flex-direction: column; gap: 10px; }
+    .ob-debrief-side { order: 0; width: 100%; }
+    .ob-debrief-grid > .ob-debrief-panel { order: 1; width: 100%; }
     .ob-debrief-panel { padding: 10px 12px; }
     .ob-debrief-actions { margin-top: 8px; }
     .ob-debrief-btn { padding: 10px 14px; font-size: 9px; }

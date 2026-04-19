@@ -608,7 +608,7 @@ const HUD_CSS = `
     }
 
     .ob-tutorial {
-      top: 88px;
+      top: 110px;
       padding: 12px 13px 13px;
     }
 
@@ -670,7 +670,7 @@ const HUD_CSS = `
     }
 
     .ob-tutorial {
-      top: 76px;
+      top: 90px;
     }
 
     .ob-prompt {

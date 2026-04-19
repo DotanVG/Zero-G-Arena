@@ -169,6 +169,7 @@ describe("LocalMatch", () => {
     const arena = {
       isGoalDoorOpen: () => true,
       isDeepInBreachRoom: () => true,
+      isInBreachRoom: () => true,
     };
 
     (match as unknown as { checkForBreachScore: (arenaArg: unknown, playerArg: unknown) => void })
@@ -198,6 +199,7 @@ describe("LocalMatch", () => {
     const arena = {
       isGoalDoorOpen: () => true,
       isDeepInBreachRoom: () => true,
+      isInBreachRoom: () => true,
     };
 
     (match as unknown as { checkForBreachScore: (arenaArg: unknown, playerArg: unknown) => void })
@@ -224,5 +226,133 @@ describe("LocalMatch", () => {
 
     expect(events).toEqual([{ type: "roundTie" }]);
     expect(match.getScore()).toEqual({ team0: 0, team1: 0 });
+  });
+
+  // ── Breach detection: phase-dependent query selection ──────────────────────
+
+  it("does not score breach for FLOATING player when isDeepInBreachRoom returns false", () => {
+    const player = createFakePlayer();
+    player.phase = "FLOATING";
+    player.getPosition = () => new THREE.Vector3(18, 0, 0);
+
+    const arena = {
+      isGoalDoorOpen: () => true,
+      isDeepInBreachRoom: () => false, // FLOATING path → no score
+      isInBreachRoom: () => true,      // would match, but should not be used for FLOATING
+    };
+
+    (match as unknown as { checkForBreachScore: (arenaArg: unknown, playerArg: unknown) => void })
+      .checkForBreachScore(arena, player);
+
+    expect(events).toEqual([]);
+    expect(match.getScore()).toEqual({ team0: 0, team1: 0 });
+  });
+
+  it("does not score breach for BREACH-phase player when isInBreachRoom returns false", () => {
+    const player = createFakePlayer();
+    player.currentBreachTeam = 1;
+    player.phase = "BREACH";
+    player.getPosition = () => new THREE.Vector3(18, 0, 0);
+
+    const arena = {
+      isGoalDoorOpen: () => true,
+      isDeepInBreachRoom: () => true,  // old path would have scored; should not be used for BREACH
+      isInBreachRoom: () => false,     // BREACH path → no score
+    };
+
+    (match as unknown as { checkForBreachScore: (arenaArg: unknown, playerArg: unknown) => void })
+      .checkForBreachScore(arena, player);
+
+    expect(events).toEqual([]);
+    expect(match.getScore()).toEqual({ team0: 0, team1: 0 });
+  });
+
+  it("scores breach for BREACH-phase player when isInBreachRoom returns true", () => {
+    const player = createFakePlayer();
+    player.currentBreachTeam = 1;
+    player.phase = "BREACH";
+    player.getPosition = () => new THREE.Vector3(18, 0, 0);
+
+    const arena = {
+      isGoalDoorOpen: () => true,
+      isDeepInBreachRoom: () => false, // should not matter for BREACH phase
+      isInBreachRoom: () => true,
+    };
+
+    (match as unknown as { checkForBreachScore: (arenaArg: unknown, playerArg: unknown) => void })
+      .checkForBreachScore(arena, player);
+
+    expect(events).toContainEqual({ type: "roundWin", winningTeam: 0, reason: "breach" });
+    expect(match.getScore()).toEqual({ team0: 1, team1: 0 });
+  });
+
+  it("does not score breach when goal door is closed regardless of position", () => {
+    const player = createFakePlayer();
+    player.phase = "FLOATING";
+    player.getPosition = () => new THREE.Vector3(18, 0, 0);
+
+    const arena = {
+      isGoalDoorOpen: () => false,
+      isDeepInBreachRoom: () => true,
+      isInBreachRoom: () => true,
+    };
+
+    (match as unknown as { checkForBreachScore: (arenaArg: unknown, playerArg: unknown) => void })
+      .checkForBreachScore(arena, player);
+
+    expect(events).toEqual([]);
+  });
+
+  // ── Bot breach entry carry state ────────────────────────────────────────────
+
+  it("initialises bot breach entry carry fields to zero when match starts", () => {
+    const bots = (match as unknown as {
+      bots: Array<{ breachEntryCarry: THREE.Vector3; breachEntryCarryTimer: number }>;
+    }).bots;
+
+    expect(bots.length).toBeGreaterThan(0);
+    for (const bot of bots) {
+      expect(bot.breachEntryCarry.x).toBe(0);
+      expect(bot.breachEntryCarry.y).toBe(0);
+      expect(bot.breachEntryCarry.z).toBe(0);
+      expect(bot.breachEntryCarryTimer).toBe(0);
+    }
+  });
+
+  it("resets bot breach entry carry to zero on round reset", () => {
+    const bots = (match as unknown as {
+      bots: Array<{
+        breachEntryCarry: THREE.Vector3;
+        breachEntryCarryTimer: number;
+        phys: { pos: THREE.Vector3 };
+      }>;
+    }).bots;
+
+    // Manually set carry state to non-zero values to simulate mid-round state
+    for (const bot of bots) {
+      bot.breachEntryCarry.set(5, 3, 2);
+      bot.breachEntryCarryTimer = 0.4;
+    }
+
+    const player = createFakePlayer();
+    const arena = {
+      getAllBarGrabPoints: () => [],
+      getBreachOpenAxis: () => "x" as const,
+      getBreachOpenSign: (team: 0 | 1) => (team === 0 ? -1 : 1) as 1 | -1,
+      getBreachRoomCenter: (team: 0 | 1) => new THREE.Vector3(team === 0 ? -18 : 18, 0, 0),
+      getNearestBar: () => null,
+      isDeepInBreachRoom: () => false,
+      isGoalDoorOpen: () => false,
+      isInBreachRoom: () => true,
+    };
+
+    match.resetForRound(arena as never, player as never);
+
+    for (const bot of bots) {
+      expect(bot.breachEntryCarry.x).toBe(0);
+      expect(bot.breachEntryCarry.y).toBe(0);
+      expect(bot.breachEntryCarry.z).toBe(0);
+      expect(bot.breachEntryCarryTimer).toBe(0);
+    }
   });
 });

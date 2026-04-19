@@ -901,45 +901,6 @@ function initMenuFx(container: HTMLElement): void {
   };
   rafMain = requestAnimationFrame(mainLoop);
 
-  // ── 5b. Mobile orbit: auto-animation + gyroscope ──
-  if (touch && orbitEl) {
-    let gyroActive = false;
-    let autoT = 0;
-    let rafMobile = 0;
-
-    const applyOrbit = (nx: number, ny: number) => {
-      orbitEl!.style.transform = `rotateX(${62 + ny * 5}deg) rotateZ(${-nx * 13}deg)`;
-    };
-
-    const mobileOrbitLoop = () => {
-      if (!root.isConnected) return;
-      if (!gyroActive) {
-        autoT += 0.008;
-        applyOrbit(Math.sin(autoT * 0.7), Math.sin(autoT * 0.4) * 0.4);
-      }
-      rafMobile = requestAnimationFrame(mobileOrbitLoop);
-    };
-    rafMobile = requestAnimationFrame(mobileOrbitLoop);
-
-    const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (e.gamma === null || e.beta === null) return;
-      gyroActive = true;
-      applyOrbit(
-        Math.max(-1, Math.min(1, e.gamma / 30)),
-        Math.max(-1, Math.min(1, (e.beta - 45) / 30)),
-      );
-    };
-    window.addEventListener("deviceorientation", handleOrientation as EventListener);
-
-    const mobMo = new MutationObserver(() => {
-      if (!root.isConnected) {
-        cancelAnimationFrame(rafMobile);
-        window.removeEventListener("deviceorientation", handleOrientation as EventListener);
-        mobMo.disconnect();
-      }
-    });
-    mobMo.observe(document.body, { childList: true });
-  }
 
   // Cleanup once container leaves the DOM
   const mo = new MutationObserver(() => {

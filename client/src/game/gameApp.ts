@@ -28,6 +28,7 @@ import { buildShotFromCamera } from "./weaponFire";
 import { NetClient } from "../net/client";
 import { MultiplayerLobby } from "../ui/multiplayerLobby";
 import type { PlaySelection } from "../ui/menu";
+import { DebriefScreen, type DebriefData, type DebriefPlayer } from "../ui/debrief";
 
 const PLAYER_UPDATE_RATE = 0.05; // 20hz
 
@@ -35,6 +36,8 @@ export class App {
   private appMode: "menu" | "solo" | "online" = "menu";
   private onlineGameActive = false;
   private matchOver = false;
+  private helpVisible = false;
+  private lastSoloSelection: PlaySelection | null = null;
   private matchEndHandle: ReturnType<typeof setTimeout> | null = null;
   private playerUpdateTimer = 0;
   private latestOnlineSnapshot: MultiplayerRoomSnapshot | null = null;
@@ -53,6 +56,7 @@ export class App {
   private lastTime = 0;
   private match: LocalMatch;
   private menu: MainMenu;
+  private debrief = new DebriefScreen();
   private multiplayer = new MultiplayerLobby();
   private onlineMatch: OnlineMatch;
   private readonly mobile = isTouchDevice();
@@ -122,6 +126,15 @@ export class App {
     };
     this.sessionMenu.onSettingsChange = (settings) => {
       this.applySessionSettings(settings);
+    };
+
+    this.debrief.onMainMenu = () => this.returnToMenuFromSolo();
+    this.debrief.onPlayAgain = () => {
+      if (this.lastSoloSelection) {
+        this.startSoloMatch(this.lastSoloSelection);
+      } else {
+        this.returnToMenuFromSolo();
+      }
     };
 
     this.net.onStateChange = (snapshot) => {
@@ -261,6 +274,9 @@ export class App {
     this.menu.onPlayOnline = (selection) => {
       void this.startOnlineLobby(selection);
     };
+    this.menu.onPlayTutorial = (selection) => {
+      this.startTutorialMatch(selection);
+    };
 
     requestAnimationFrame((timestamp) => this.loop(timestamp));
   }
@@ -277,6 +293,10 @@ export class App {
       } else if (this.appMode !== "menu") {
         this.openSessionMenu();
       }
+    }
+
+    if (this.input.consumeHelpPressed() && this.appMode !== "menu") {
+      this.helpVisible = !this.helpVisible;
     }
 
     if (this.appMode === "solo") {
@@ -609,6 +629,7 @@ export class App {
         phase: this.player.phase,
         team: this.player.team,
       }),
+      helpVisible: this.helpVisible,
       dt,
       team: this.player.team,
     });
@@ -667,6 +688,7 @@ export class App {
         phase: this.player.phase,
         team: this.player.team,
       }),
+      helpVisible: this.helpVisible,
       dt,
       team: this.player.team,
     });
@@ -708,8 +730,6 @@ export class App {
     winningTeam: 0 | 1,
     finalScore: { team0: number; team1: number },
   ): void {
-    // onRoundWin already ran and scheduled the next round via round.endRound();
-    // override that so we show the match result and go back to menu instead.
     this.matchOver = true;
     this.round.cancelPendingRestart();
     const label = winningTeam === 0 ? "CYAN" : "MAGENTA";
@@ -719,12 +739,59 @@ export class App {
     if (this.matchEndHandle) clearTimeout(this.matchEndHandle);
     this.matchEndHandle = setTimeout(() => {
       this.matchEndHandle = null;
-      this.returnToMenuFromSolo();
+      this.showSoloDebrief(winningTeam, finalScore);
     }, MATCH_END_DELAY * 1000);
+  }
+
+  private showSoloDebrief(
+    winningTeam: 0 | 1,
+    finalScore: { team0: number; team1: number },
+  ): void {
+    const rosters = this.match.getHudRosters(this.player);
+    const playerTeam = this.player.team;
+    const enemyTeam = (1 - playerTeam) as 0 | 1;
+
+    const ownPlayers: DebriefPlayer[] = rosters.ownTeam.map((p) => ({
+      id: p.id,
+      name: p.name,
+      team: playerTeam,
+      breaches: p.kills,
+      frozen: p.deaths,
+      isBot: p.isBot,
+      isSelf: p.id === "local-player",
+    }));
+    const enemyPlayers: DebriefPlayer[] = rosters.enemyTeam.map((p) => ({
+      id: p.id,
+      name: p.name,
+      team: enemyTeam,
+      breaches: p.kills,
+      frozen: p.deaths,
+      isBot: p.isBot,
+      isSelf: false,
+    }));
+
+    const teamSize = this.lastSoloSelection?.teamSize ?? 1;
+    const sizeLabelMap: Record<number, string> = {
+      1: "1v1 Duel", 2: "2v2 Duos", 5: "5v5 Squads", 10: "10v10 Rush", 20: "20v20 War",
+    };
+
+    const debriefData: DebriefData = {
+      winningTeam,
+      score: finalScore,
+      players: [...ownPlayers, ...enemyPlayers],
+      playerTeam,
+      matchLabel: `${sizeLabelMap[teamSize] ?? "Solo"} · ${finalScore.team0} – ${finalScore.team1}`,
+    };
+
+    this.hud.setVisible(false);
+    this.hud.hideRoundEnd();
+    this.killFeed.setVisible(false);
+    this.debrief.show(debriefData);
   }
 
   private returnToMenuFromSolo(): void {
     this.closeSessionMenu();
+    this.debrief.hide();
     this.appMode = "menu";
     this.matchOver = false;
     this.projectiles.clear();
@@ -814,10 +881,18 @@ export class App {
 
   // ── Solo match start ────────────────────────────────────────────────────────
 
+  private startTutorialMatch(selection: PlaySelection): void {
+    this.tutorial.forceRestart();
+    this.startSoloMatch({ ...selection, teamSize: 1, noBots: true });
+  }
+
   private startSoloMatch(selection: PlaySelection): void {
+    this.lastSoloSelection = selection;
+    this.debrief.hide();
     this.appMode = "solo";
     this.matchOver = false;
     this.onlineBreachReported = false;
+    this.helpVisible = false;
     this.tutorial.beginRun();
     if (this.matchEndHandle) {
       clearTimeout(this.matchEndHandle);
@@ -833,6 +908,7 @@ export class App {
       humanName: selection.name,
       humanTeam: 0,
       teamSize: selection.teamSize,
+      noBots: selection.noBots,
     });
 
     if (this.mobile) {

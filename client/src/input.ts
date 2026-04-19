@@ -14,6 +14,7 @@ export class InputManager {
   private gunTuneResetPressed = false;
   private gunTunePrintPressed = false;
   private menuTogglePressed = false;
+  private helpPressed = false;
 
   // Mobile touch input state
   private touchLookDx = 0;
@@ -33,6 +34,7 @@ export class InputManager {
       if (e.code === 'KeyP' && !e.repeat) this.gunTuneTogglePressed = true;
       if (e.code === 'Enter' && !e.repeat) this.gunTunePrintPressed = true;
       if (e.code === 'Escape' && !e.repeat) this.menuTogglePressed = true;
+      if (e.code === 'KeyH'   && !e.repeat) this.helpPressed = true;
       // Only intercept navigation/delete keys when focus is NOT in a text field,
       // so the Call Sign input and other fields retain normal keyboard behaviour.
       const tag = (document.activeElement as HTMLElement | null)?.tagName ?? '';
@@ -263,6 +265,12 @@ export class InputManager {
     const v = this.menuTogglePressed;
     this.menuTogglePressed = false;
     return v;
+  }
+
+  public consumeHelpPressed(): boolean {
+    const v = this.helpPressed;
+    this.helpPressed = false;
+    return v && !this.uiBlocked;
   }
 
   public getGunTuneAxes(): {

@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS: SessionSettings = {
 };
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
   .ob-session-launcher {
     position: fixed;
@@ -34,29 +34,25 @@ const CSS = `
     display: none;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
-    padding: 0 14px;
-    border-radius: 999px;
+    min-height: 38px;
+    padding: 0 16px;
+    border-radius: 0;
     border: 1px solid rgba(127, 252, 255, 0.22);
-    background:
-      linear-gradient(135deg, rgba(127, 252, 255, 0.12), rgba(255, 125, 248, 0.08)),
-      rgba(4, 9, 14, 0.78);
-    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
+    background: rgba(4, 9, 14, 0.82);
     color: #effcff;
     cursor: pointer;
-    font-family: "Space Mono", monospace;
-    font-size: 11px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     backdrop-filter: blur(12px);
+    transition: border-color 0.2s, background 0.2s;
   }
 
   .ob-session-launcher:hover {
-    border-color: rgba(127, 252, 255, 0.34);
-    background:
-      linear-gradient(135deg, rgba(127, 252, 255, 0.18), rgba(255, 125, 248, 0.1)),
-      rgba(4, 9, 14, 0.9);
+    border-color: rgba(127, 252, 255, 0.5);
+    background: rgba(7, 15, 28, 0.92);
   }
 
   .ob-session-root {
@@ -71,7 +67,7 @@ const CSS = `
       radial-gradient(circle at top, rgba(16, 36, 54, 0.74), rgba(3, 8, 14, 0.92) 56%, rgba(2, 4, 7, 0.98)),
       linear-gradient(180deg, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.6));
     color: #effcff;
-    font-family: "Oxanium", sans-serif;
+    font-family: "Cormorant Garamond", serif;
   }
 
   .ob-session-root * {
@@ -82,13 +78,13 @@ const CSS = `
     width: min(620px, calc(100vw - 36px));
     max-height: calc(100vh - 36px);
     overflow: auto;
-    border-radius: 28px;
-    border: 1px solid rgba(127, 252, 255, 0.18);
+    border-radius: 0;
+    border: 1px solid rgba(210, 220, 240, 0.16);
     background:
-      radial-gradient(circle at top left, rgba(127, 252, 255, 0.1), rgba(127, 252, 255, 0) 26%),
-      radial-gradient(circle at bottom right, rgba(255, 125, 248, 0.1), rgba(255, 125, 248, 0) 28%),
-      rgba(5, 11, 17, 0.92);
-    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+      radial-gradient(circle at top left, rgba(127, 252, 255, 0.07), rgba(127, 252, 255, 0) 30%),
+      radial-gradient(circle at bottom right, rgba(255, 125, 248, 0.07), rgba(255, 125, 248, 0) 32%),
+      rgba(5, 11, 17, 0.96);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(16px);
   }
 
@@ -109,7 +105,7 @@ const CSS = `
   .ob-session-value,
   .ob-session-note,
   .ob-session-toggle-copy {
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     text-transform: uppercase;
   }
 
@@ -145,30 +141,41 @@ const CSS = `
   }
 
   .ob-session-button {
-    min-height: 52px;
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.04);
+    position: relative;
+    min-height: 50px;
+    border-radius: 0;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.03);
     color: #effcff;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.16em;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s;
   }
 
   .ob-session-button:hover {
-    border-color: rgba(255, 255, 255, 0.22);
-    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-1px);
   }
 
   .ob-session-button--resume {
-    border-color: rgba(127, 252, 255, 0.26);
-    box-shadow: 0 0 0 1px rgba(127, 252, 255, 0.08) inset;
+    border-color: rgba(127, 252, 255, 0.28);
+  }
+
+  .ob-session-button--resume:hover {
+    border-color: rgba(127, 252, 255, 0.55);
+    color: oklch(0.88 0.12 210);
   }
 
   .ob-session-button--exit {
-    border-color: rgba(255, 140, 160, 0.26);
-    box-shadow: 0 0 0 1px rgba(255, 140, 160, 0.06) inset;
+    border-color: rgba(255, 140, 160, 0.28);
+  }
+
+  .ob-session-button--exit:hover {
+    border-color: rgba(255, 140, 160, 0.55);
+    color: #ffb1c0;
   }
 
   .ob-session-settings {
@@ -178,16 +185,17 @@ const CSS = `
   }
 
   .ob-session-settings-card {
-    border-radius: 22px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0;
+    border: 1px solid rgba(210, 220, 240, 0.08);
+    background: rgba(255, 255, 255, 0.02);
     padding: 16px;
   }
 
   .ob-session-settings-title {
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-family: "Cormorant Garamond", serif;
+    font-size: 22px;
+    font-weight: 300;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
   }
 
@@ -236,9 +244,9 @@ const CSS = `
     align-items: center;
     margin-top: 10px;
     padding: 12px 14px;
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0;
+    border: 1px solid rgba(210, 220, 240, 0.08);
+    background: rgba(255, 255, 255, 0.02);
   }
 
   .ob-session-toggle-copy {
@@ -260,8 +268,11 @@ const CSS = `
     }
 
     .ob-session-launcher {
-      top: 12px;
-      right: 12px;
+      top: 10px;
+      right: 10px;
+      font-size: 9px;
+      min-height: 32px;
+      padding: 0 12px;
     }
   }
 `;

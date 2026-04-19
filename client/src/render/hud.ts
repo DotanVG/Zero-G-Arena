@@ -24,6 +24,7 @@ export interface HudState {
   ownTeam: FullPlayerInfo[];
   enemyTeam: EnemyPlayerInfo[];
   tutorialPrompt: TutorialPrompt | null;
+  helpVisible: boolean;
   dt: number;
   team: 0 | 1;
 }
@@ -79,6 +80,7 @@ export class HUD {
     this.renderDamage(state.damage);
     this.renderTutorial(state.phase, state.tutorialPrompt, state.team);
     this.renderScoreboard(state.tabHeld, state.ownTeam, state.enemyTeam, state.showPing, state.team);
+    this.view.help.classList.toggle("ob-help-visible", state.helpVisible);
   }
 
   private renderScore(

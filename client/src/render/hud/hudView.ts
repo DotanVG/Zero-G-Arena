@@ -37,21 +37,40 @@ const HUD_MARKUP = `
 
   <div id="hud-round-end" class="ob-round-end"></div>
   <div id="hud-tab" class="ob-scoreboard-overlay"></div>
+
+  <div id="hud-help" class="ob-help-overlay">
+    <div class="ob-help-panel">
+      <div class="ob-help-header">
+        <div class="ob-help-title">Controls</div>
+        <div class="ob-help-close">[H] Close</div>
+      </div>
+      <div class="ob-help-grid">
+        <div class="ob-help-row"><span class="ob-help-key">LMB</span><span class="ob-help-desc">Freeze shot</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">E</span><span class="ob-help-desc">Grab bar</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">Space + Mouse ↕</span><span class="ob-help-desc">Aim launch power</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">Space release</span><span class="ob-help-desc">Slingshot into zero-G</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">Tab</span><span class="ob-help-desc">Scoreboard</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">Esc</span><span class="ob-help-desc">Session menu</span></div>
+        <div class="ob-help-row"><span class="ob-help-key">V</span><span class="ob-help-desc">Third-person toggle</span></div>
+        <div class="ob-help-row ob-help-row--goal">Float through the enemy portal to breach and score</div>
+      </div>
+    </div>
+  </div>
 `;
 
 const HUD_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
   .ob-hud-root {
-    --hud-cyan: #74f5ff;
-    --hud-cyan-soft: rgba(116, 245, 255, 0.14);
-    --hud-magenta: #ff82ef;
-    --hud-magenta-soft: rgba(255, 130, 239, 0.16);
-    --hud-text: #f3fdff;
-    --hud-muted: #9db8c8;
-    --hud-panel: rgba(5, 12, 18, 0.74);
-    --hud-panel-strong: rgba(3, 9, 14, 0.9);
-    --hud-panel-border: rgba(130, 232, 255, 0.18);
+    --hud-cyan: oklch(0.82 0.15 210);
+    --hud-cyan-soft: oklch(0.82 0.15 210 / 0.14);
+    --hud-magenta: oklch(0.72 0.25 330);
+    --hud-magenta-soft: oklch(0.72 0.25 330 / 0.22);
+    --hud-text: #e8ecf4;
+    --hud-muted: #9aa5b8;
+    --hud-panel: rgba(7, 10, 18, 0.76);
+    --hud-panel-strong: rgba(7, 10, 18, 0.92);
+    --hud-panel-border: rgba(210, 220, 240, 0.16);
     --hud-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
     position: fixed;
     inset: 0;
@@ -59,7 +78,7 @@ const HUD_CSS = `
     pointer-events: none;
     user-select: none;
     color: var(--hud-text);
-    font-family: "Oxanium", sans-serif;
+    font-family: "Cormorant Garamond", serif;
   }
 
   .ob-hud-root * {
@@ -120,20 +139,21 @@ const HUD_CSS = `
 
   .ob-score-value {
     min-width: 112px;
-    font-size: 25px;
-    font-weight: 700;
-    letter-spacing: 0.2em;
+    font-family: "Cormorant Garamond", serif;
+    font-size: 26px;
+    font-weight: 400;
+    letter-spacing: 0.22em;
     text-align: center;
     text-transform: uppercase;
-    text-shadow: 0 0 18px rgba(116, 245, 255, 0.25);
+    text-shadow: 0 0 18px oklch(0.82 0.15 210 / 0.25);
   }
 
   .ob-round-timer {
     display: none;
     padding: 7px 13px 6px;
-    border-radius: 999px;
-    color: #d7f9ff;
-    font-family: "Space Mono", monospace;
+    border-radius: 4px;
+    color: #e8ecf4;
+    font-family: "JetBrains Mono", monospace;
     font-size: 13px;
     letter-spacing: 0.18em;
     text-transform: uppercase;
@@ -145,10 +165,11 @@ const HUD_CSS = `
     left: 50%;
     top: 38%;
     transform: translate(-50%, -50%);
+    font-family: "Cormorant Garamond", serif;
     font-size: 92px;
-    font-weight: 700;
+    font-weight: 300;
     letter-spacing: 0.08em;
-    text-shadow: 0 0 40px rgba(116, 245, 255, 0.9);
+    text-shadow: 0 0 40px oklch(0.82 0.15 210 / 0.9);
   }
 
   .ob-objective {
@@ -159,10 +180,11 @@ const HUD_CSS = `
     transform: translate(-50%, -50%);
     max-width: min(620px, 82vw);
     padding: 10px 16px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.24em;
+    border-radius: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.22em;
     line-height: 1.45;
     text-align: center;
     text-transform: uppercase;
@@ -226,7 +248,7 @@ const HUD_CSS = `
   .ob-power-label {
     margin-top: 7px;
     color: #e3fbff;
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 11px;
     letter-spacing: 0.12em;
     text-align: center;
@@ -251,7 +273,7 @@ const HUD_CSS = `
     min-height: 32px;
     padding: 6px 10px;
     border-radius: 999px;
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -302,7 +324,7 @@ const HUD_CSS = `
 
   .ob-tutorial__eyebrow {
     color: var(--hud-muted);
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.18em;
@@ -311,9 +333,10 @@ const HUD_CSS = `
 
   .ob-tutorial__title {
     margin-top: 6px;
-    font-size: 19px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    font-family: "Cormorant Garamond", serif;
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
   }
 
   .ob-tutorial__body {
@@ -367,7 +390,7 @@ const HUD_CSS = `
     justify-content: space-between;
     gap: 12px;
     color: var(--hud-muted);
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 11px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -413,7 +436,7 @@ const HUD_CSS = `
   .ob-scoreboard__subtitle {
     margin-top: 2px;
     color: var(--hud-muted);
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 10px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -421,7 +444,7 @@ const HUD_CSS = `
 
   .ob-scoreboard__summary {
     color: var(--hud-muted);
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 10px;
     letter-spacing: 0.14em;
     text-align: right;
@@ -436,7 +459,7 @@ const HUD_CSS = `
   .ob-scoreboard__table thead th {
     padding: 10px 16px;
     color: var(--hud-muted);
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.14em;
@@ -459,7 +482,7 @@ const HUD_CSS = `
     width: 1%;
     white-space: nowrap;
     text-align: center;
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
   }
 
   .ob-scoreboard__name {
@@ -481,7 +504,7 @@ const HUD_CSS = `
     height: 20px;
     padding: 0 7px;
     border-radius: 999px;
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -508,7 +531,7 @@ const HUD_CSS = `
     height: 26px;
     padding: 0 10px;
     border-radius: 999px;
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -536,7 +559,7 @@ const HUD_CSS = `
   .ob-scoreboard__empty {
     padding: 18px 16px 20px;
     color: var(--hud-muted);
-    font-family: "Space Mono", monospace;
+    font-family: "JetBrains Mono", monospace;
     font-size: 12px;
     letter-spacing: 0.12em;
     text-align: center;
@@ -659,6 +682,86 @@ const HUD_CSS = `
     }
   }
 
+  /* ── HELP OVERLAY ── */
+  .ob-help-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 80;
+    pointer-events: auto;
+  }
+  .ob-help-overlay.ob-help-visible {
+    display: flex;
+  }
+  .ob-help-panel {
+    background: rgba(7, 10, 18, 0.97);
+    border: 1px solid rgba(210, 220, 240, 0.16);
+    padding: 24px 28px;
+    min-width: 320px;
+    max-width: min(480px, 92vw);
+  }
+  .ob-help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(210, 220, 240, 0.08);
+  }
+  .ob-help-title {
+    font-family: "Cormorant Garamond", serif;
+    font-size: 24px;
+    font-weight: 300;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #e8ecf4;
+  }
+  .ob-help-close {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--hud-muted);
+    text-transform: uppercase;
+  }
+  .ob-help-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .ob-help-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .ob-help-key {
+    min-width: 120px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(210, 220, 240, 0.1);
+    color: var(--hud-cyan);
+    text-align: center;
+    flex-shrink: 0;
+    font-size: 9px;
+  }
+  .ob-help-desc {
+    color: var(--hud-muted);
+  }
+  .ob-help-row--goal {
+    margin-top: 6px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(210, 220, 240, 0.06);
+    color: var(--hud-magenta);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .ob-score-pill,
     .ob-round-timer,
@@ -704,6 +807,7 @@ export interface HudElements {
   tutorialBody: HTMLDivElement;
   roundEnd: HTMLDivElement;
   tab: HTMLDivElement;
+  help: HTMLDivElement;
 }
 
 export function createHudView(): HudElements {
@@ -738,5 +842,6 @@ export function createHudView(): HudElements {
     tutorialBody: q("hud-tutorial-body"),
     roundEnd: q("hud-round-end"),
     tab: q("hud-tab"),
+    help: q("hud-help"),
   };
 }

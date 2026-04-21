@@ -609,8 +609,6 @@ export class App {
 
     this.onlineMatch.dispose();
     this.projectiles.clear();
-    this.hud.setVisible(false);
-    this.hud.hideRoundEnd();
     this.killFeed.setVisible(false);
     this.input.exitPointerLock();
     this.mobileControls?.hide();
@@ -624,7 +622,14 @@ export class App {
     if (this.pendingOnlineDebrief) {
       const debrief = this.pendingOnlineDebrief;
       this.pendingOnlineDebrief = null;
-      this.showMatchDebrief(debrief);
+      if (this.matchEndHandle) clearTimeout(this.matchEndHandle);
+      this.matchEndHandle = setTimeout(() => {
+        this.matchEndHandle = null;
+        this.showMatchDebrief(debrief);
+      }, 4000);
+    } else {
+      this.hud.setVisible(false);
+      this.hud.hideRoundEnd();
     }
   }
 
@@ -775,8 +780,10 @@ export class App {
     this.matchOver = true;
     this.round.cancelPendingRestart();
     if (this.matchEndHandle) clearTimeout(this.matchEndHandle);
-    this.matchEndHandle = null;
-    this.showSoloDebrief(winningTeam, finalScore);
+    this.matchEndHandle = setTimeout(() => {
+      this.matchEndHandle = null;
+      this.showSoloDebrief(winningTeam, finalScore);
+    }, 4000);
   }
 
   private showSoloDebrief(
@@ -975,6 +982,7 @@ export class App {
     this.onlineGameActive = false;
     this.onlineBreachReported = false;
     this.pendingOnlineDebrief = null;
+    if (this.matchEndHandle) { clearTimeout(this.matchEndHandle); this.matchEndHandle = null; }
     this.previousOnlinePhase = null;
     this.projectiles.clear();
     this.hud.setVisible(false);
@@ -1008,6 +1016,7 @@ export class App {
     this.onlineGameActive = false;
     this.onlineBreachReported = false;
     this.pendingOnlineDebrief = null;
+    if (this.matchEndHandle) { clearTimeout(this.matchEndHandle); this.matchEndHandle = null; }
     this.onlineMatch.dispose();
     this.multiplayer.hide();
     this.hud.setVisible(false);

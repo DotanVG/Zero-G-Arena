@@ -4,7 +4,7 @@ import { computeBreachSpawnPosition } from "../../player/playerSpawn";
 import { parsePortalParams, type PortalParams } from "./parsePortalParams";
 
 const OUTBOUND_URL = "https://vibej.am/portal/2026";
-const PORTAL_SIZE = { width: 2, height: 3, depth: 0.35 };
+const PORTAL_SIZE = { width: 2.3, height: 3.25, depth: 0.35 };
 const TRIGGER_DEPTH = 1.2;
 const DEFAULT_ARRIVAL_CENTER = new THREE.Vector3(0, 0, -23);
 
@@ -23,8 +23,11 @@ interface PortalTrigger {
 }
 
 interface PortalAnimationState {
-  swirl: THREE.Mesh;
-  glow: THREE.Mesh;
+  core: THREE.Mesh;
+  halo: THREE.Mesh;
+  rim: THREE.Mesh;
+  rimBasePositions: Float32Array;
+  rimVertexPulse: Float32Array;
   sparks: THREE.Points;
   basePositions: Float32Array;
   phase: number;
@@ -90,7 +93,7 @@ export function initVibeJamPortal(scene: THREE.Scene, params: PortalParams): voi
   const targetUrl = buildRedirectUrl(params.ref, params, false);
   const trigger = createPortal(scene, {
     ...transform,
-    color: 0x00d9ff,
+    color: 0x79ff51,
     label: "Return Portal",
     targetUrl,
     type: "return",
@@ -107,7 +110,7 @@ export function addOutboundVibeJamPortal(scene: THREE.Scene, params: PortalParam
   const targetUrl = buildRedirectUrl(OUTBOUND_URL, params, true);
   const trigger = createPortal(scene, {
     ...transform,
-    color: 0xc050ff,
+    color: 0x64ff44,
     label: "Exit to Vibe Jam 2026",
     targetUrl,
     type: "outbound",
@@ -207,49 +210,19 @@ function createPortal(
     new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), options.normal.clone().normalize()),
   );
 
-  const material = new THREE.MeshBasicMaterial({
-    color: options.color,
-    transparent: true,
-    opacity: 0.88,
-    side: THREE.DoubleSide,
-  });
-  const panelMaterial = new THREE.MeshBasicMaterial({
-    color: options.color,
-    transparent: true,
-    opacity: 0.18,
-    side: THREE.DoubleSide,
-  });
+  const core = createPortalCore(options.color);
+  core.renderOrder = 1;
+  group.add(core);
 
-  const thickness = 0.12;
-  const halfW = PORTAL_SIZE.width / 2;
-  const halfH = PORTAL_SIZE.height / 2;
-  const bars = [
-    { size: [PORTAL_SIZE.width + thickness * 2, thickness, thickness], pos: [0, halfH, 0] },
-    { size: [PORTAL_SIZE.width + thickness * 2, thickness, thickness], pos: [0, -halfH, 0] },
-    { size: [thickness, PORTAL_SIZE.height, thickness], pos: [-halfW, 0, 0] },
-    { size: [thickness, PORTAL_SIZE.height, thickness], pos: [halfW, 0, 0] },
-  ] as const;
+  const halo = createPortalHalo(options.color);
+  halo.renderOrder = 2;
+  halo.position.z = 0.02;
+  group.add(halo);
 
-  for (const bar of bars) {
-    const [width, height, depth] = bar.size;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
-    const [x, y, z] = bar.pos;
-    mesh.position.set(x, y, z);
-    group.add(mesh);
-  }
-
-  const panel = new THREE.Mesh(new THREE.PlaneGeometry(PORTAL_SIZE.width, PORTAL_SIZE.height), panelMaterial);
-  panel.renderOrder = 1;
-  group.add(panel);
-
-  const swirl = createSwirlMesh(options.color);
-  swirl.renderOrder = 2;
-  group.add(swirl);
-
-  const glow = createGlowMesh(options.color);
-  glow.position.z = 0.03;
-  glow.renderOrder = 3;
-  group.add(glow);
+  const rim = createOrganicRim(options.color);
+  rim.renderOrder = 3;
+  rim.position.z = 0.04;
+  group.add(rim);
 
   const sparks = createSparkPoints();
   sparks.renderOrder = 4;
@@ -275,8 +248,11 @@ function createPortal(
     targetUrl: options.targetUrl,
     type: options.type,
     animation: {
-      swirl,
-      glow,
+      core,
+      halo,
+      rim,
+      rimBasePositions: (rim.geometry.getAttribute("position").array as Float32Array).slice(),
+      rimVertexPulse: buildRimPulseOffsets(rim.geometry.getAttribute("position").count),
       sparks,
       basePositions: (sparks.geometry.getAttribute("position").array as Float32Array).slice(),
       phase: Math.random() * Math.PI * 2,
@@ -284,28 +260,133 @@ function createPortal(
   };
 }
 
-function createSwirlMesh(color: number): THREE.Mesh {
-  const geometry = new THREE.PlaneGeometry(PORTAL_SIZE.width * 0.96, PORTAL_SIZE.height * 0.96, 32, 32);
+function createPortalCore(color: number): THREE.Mesh {
+  const geometry = new THREE.CircleGeometry(1, 100);
+  geometry.scale(PORTAL_SIZE.width * 0.46, PORTAL_SIZE.height * 0.45, 1);
+  const material = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      time: { value: 0 },
+      tint: { value: new THREE.Color(color) },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float time;
+      uniform vec3 tint;
+
+      float hash(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+      }
+
+      void main() {
+        vec2 p = vUv - 0.5;
+        p.x *= 0.78;
+        float r = length(p);
+        if (r > 0.5) discard;
+
+        float a = atan(p.y, p.x);
+        float swirl = sin(a * 6.0 + time * 2.1 + r * 16.0) * 0.5 + 0.5;
+        float cloud = noise(p * 9.0 + vec2(time * 0.75, -time * 0.4));
+        float goo = smoothstep(0.15, 0.95, mix(swirl, cloud, 0.55));
+        float edgeFade = smoothstep(0.5, 0.08, r);
+        vec3 color = mix(vec3(0.14, 0.45, 0.08), tint, goo);
+        color += vec3(0.4, 0.95, 0.35) * pow(1.0 - r * 1.85, 2.0);
+        float alpha = edgeFade * (0.45 + goo * 0.42);
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+  return new THREE.Mesh(geometry, material);
+}
+
+function createPortalHalo(color: number): THREE.Mesh {
+  const geometry = new THREE.RingGeometry(0.85, 1.03, 96);
+  geometry.scale(PORTAL_SIZE.width * 0.46, PORTAL_SIZE.height * 0.45, 1);
   const material = new THREE.MeshBasicMaterial({
     color,
     transparent: true,
-    opacity: 0.52,
+    opacity: 0.24,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  return new THREE.Mesh(geometry, material);
+}
+
+function createOrganicRim(color: number): THREE.Mesh {
+  const outer = makeOrganicEllipsePath(1.12, 1.44, 0.1, 96, 0.4);
+  const inner = makeOrganicEllipsePath(0.88, 1.18, 0.07, 96, 2.4).reverse();
+  const shape = new THREE.Shape();
+  shape.moveTo(outer[0].x, outer[0].y);
+  for (let i = 1; i < outer.length; i += 1) shape.lineTo(outer[i].x, outer[i].y);
+  shape.closePath();
+  const hole = new THREE.Path();
+  hole.moveTo(inner[0].x, inner[0].y);
+  for (let i = 1; i < inner.length; i += 1) hole.lineTo(inner[i].x, inner[i].y);
+  hole.closePath();
+  shape.holes.push(hole);
+
+  const geometry = new THREE.ShapeGeometry(shape);
+  geometry.scale(PORTAL_SIZE.width * 0.43, PORTAL_SIZE.height * 0.38, 1);
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.82,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
   });
   return new THREE.Mesh(geometry, material);
 }
 
-function createGlowMesh(color: number): THREE.Mesh {
-  const geometry = new THREE.RingGeometry(PORTAL_SIZE.width * 0.45, PORTAL_SIZE.width * 0.57, 64);
-  const material = new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity: 0.36,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-  });
-  return new THREE.Mesh(geometry, material);
+function makeOrganicEllipsePath(
+  rx: number,
+  ry: number,
+  jitter: number,
+  segments: number,
+  seed: number,
+): THREE.Vector2[] {
+  const points: THREE.Vector2[] = [];
+  for (let i = 0; i < segments; i += 1) {
+    const t = (i / segments) * Math.PI * 2;
+    const wave =
+      Math.sin(t * 3 + seed) * 0.5 +
+      Math.sin(t * 5 + seed * 2.1) * 0.35 +
+      Math.sin(t * 9 + seed * 0.7) * 0.15;
+    const radiusJitter = 1 + wave * jitter;
+    points.push(new THREE.Vector2(Math.cos(t) * rx * radiusJitter, Math.sin(t) * ry * radiusJitter));
+  }
+  return points;
+}
+
+function buildRimPulseOffsets(vertexCount: number): Float32Array {
+  const phases = new Float32Array(vertexCount);
+  for (let i = 0; i < vertexCount; i += 1) {
+    phases[i] = (i / vertexCount) * Math.PI * 2 + Math.random() * 0.8;
+  }
+  return phases;
 }
 
 function createSparkPoints(): THREE.Points {
@@ -325,30 +406,65 @@ function createSparkPoints(): THREE.Points {
   }
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 
+  const sparkTexture = createSparkTexture();
   const material = new THREE.PointsMaterial({
     color: 0x9bff6e,
-    size: 0.06,
+    size: 0.08,
     transparent: true,
     opacity: 0.9,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
+    map: sparkTexture,
+    alphaTest: 0.25,
   });
 
   return new THREE.Points(geometry, material);
 }
 
+function createSparkTexture(): THREE.Texture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const grad = ctx.createRadialGradient(32, 32, 3, 32, 32, 30);
+    grad.addColorStop(0, "rgba(227, 255, 185, 1)");
+    grad.addColorStop(0.45, "rgba(153, 255, 89, 0.95)");
+    grad.addColorStop(1, "rgba(76, 255, 51, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function animatePortal(animation: PortalAnimationState, dt: number, elapsedSeconds: number): void {
   animation.phase += dt;
-  const wobble = Math.sin(elapsedSeconds * 3.2 + animation.phase) * 0.06;
+  const wobble = Math.sin(elapsedSeconds * 2.9 + animation.phase) * 0.045;
 
-  animation.swirl.scale.set(1 + wobble, 1 - wobble * 0.6, 1);
-  animation.swirl.rotation.z += dt * 0.9;
-  const swirlMaterial = animation.swirl.material as THREE.MeshBasicMaterial;
-  swirlMaterial.opacity = 0.44 + Math.sin(elapsedSeconds * 4.7 + animation.phase * 0.5) * 0.1;
+  const coreMaterial = animation.core.material as THREE.ShaderMaterial;
+  coreMaterial.uniforms.time.value = elapsedSeconds + animation.phase * 0.3;
+  animation.core.scale.set(1 + wobble, 1 + wobble * 0.35, 1);
 
-  animation.glow.rotation.z -= dt * 1.8;
-  const glowMaterial = animation.glow.material as THREE.MeshBasicMaterial;
-  glowMaterial.opacity = 0.25 + Math.sin(elapsedSeconds * 5.1 + animation.phase) * 0.09;
+  animation.halo.rotation.z -= dt * 0.55;
+  const haloMaterial = animation.halo.material as THREE.MeshBasicMaterial;
+  haloMaterial.opacity = 0.2 + Math.sin(elapsedSeconds * 4.2 + animation.phase) * 0.07;
+
+  const rimPositions = animation.rim.geometry.getAttribute("position") as THREE.BufferAttribute;
+  const rimArray = rimPositions.array as Float32Array;
+  for (let i = 0, vertex = 0; i < rimArray.length; i += 3, vertex += 1) {
+    const baseX = animation.rimBasePositions[i];
+    const baseY = animation.rimBasePositions[i + 1];
+    const theta = animation.rimVertexPulse[vertex];
+    const pulse = 1 + Math.sin(elapsedSeconds * 3.6 + theta + animation.phase) * 0.05;
+    rimArray[i] = baseX * pulse;
+    rimArray[i + 1] = baseY * pulse;
+  }
+  rimPositions.needsUpdate = true;
+  animation.rim.rotation.z += dt * 0.14;
+  const rimMaterial = animation.rim.material as THREE.MeshBasicMaterial;
+  rimMaterial.opacity = 0.75 + Math.sin(elapsedSeconds * 6.4 + animation.phase) * 0.09;
 
   const positions = animation.sparks.geometry.getAttribute("position") as THREE.BufferAttribute;
   const array = positions.array as Float32Array;
@@ -357,10 +473,10 @@ function animatePortal(animation: PortalAnimationState, dt: number, elapsedSecon
     const px = base[i];
     const py = base[i + 1];
     const dist = Math.hypot(px / PORTAL_SIZE.width, py / PORTAL_SIZE.height);
-    const drift = elapsedSeconds * (1.9 + dist * 2.7) + i * 0.021 + animation.phase;
-    array[i] = px + Math.cos(drift) * 0.03;
-    array[i + 1] = py + Math.sin(drift * 1.3) * 0.03;
-    array[i + 2] = base[i + 2] + Math.sin(drift * 2.1) * 0.05;
+    const drift = elapsedSeconds * (2.1 + dist * 3.3) + i * 0.021 + animation.phase;
+    array[i] = px + Math.cos(drift) * 0.05;
+    array[i + 1] = py + Math.sin(drift * 1.5) * 0.045;
+    array[i + 2] = base[i + 2] + Math.sin(drift * 2.6) * 0.05;
   }
   positions.needsUpdate = true;
 }

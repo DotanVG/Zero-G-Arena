@@ -30,6 +30,18 @@ import { NetClient } from "../net/client";
 import { MultiplayerLobby } from "../ui/multiplayerLobby";
 import type { PlaySelection } from "../ui/menu";
 import { DebriefScreen, type DebriefData, type DebriefPlayer } from "../ui/debrief";
+import {
+  PORTAL_ARRIVAL_SPAWN,
+  checkPortalCollisions,
+  clearVibeJamPortals,
+  configureOutboundPortal,
+  configurePortalArrivalSpawn,
+  getPortalParams,
+  initVibeJamPortal,
+  isPortalArrival,
+  updateVibeJamPortals,
+} from "./portal/vibeJamPortal";
+import type { PortalParams } from "./portal/parsePortalParams";
 
 const PLAYER_UPDATE_RATE = 0.05; // 20hz
 
@@ -46,6 +58,8 @@ export class App {
   private previousOnlinePhase: MultiplayerRoomSnapshot["phase"] | null = null;
   private onlinePlayerName = "Pilot";
   private onlineBreachReported = false;
+  private portalArrivalPending = false;
+  private portalUrlCleaned = false;
 
   private arena: Arena;
   private cam: CameraController;
@@ -64,6 +78,7 @@ export class App {
   private readonly mobile = isTouchDevice();
   private mobileControls: MobileControls | null = null;
   private net = new NetClient();
+  private portalParams: PortalParams;
   private player: LocalPlayer;
   private projectiles: ProjectileSystem;
   private round = new RoundController();
@@ -74,6 +89,8 @@ export class App {
   private tutorial = new FirstTimeTutorial();
 
   public constructor() {
+    this.portalParams = getPortalParams();
+    this.portalArrivalPending = isPortalArrival();
     this.sceneMgr = new SceneManager();
     this.sound = new SoundEngine(this.sceneMgr.getCamera(), this.sceneMgr.getScene());
     this.input = new InputManager();
@@ -286,7 +303,6 @@ export class App {
   }
 
   public start(): void {
-    this.menu.show();
     this.menu.onPlaySolo = (selection) => {
       this.startSoloMatch(selection);
     };
@@ -299,6 +315,16 @@ export class App {
     this.menu.onPlayTutorial = (selection) => {
       this.startTutorialMatch(selection);
     };
+
+    if (this.portalArrivalPending) {
+      this.startSoloMatch({
+        name: this.portalParams.username?.trim() || "Portal Pilot",
+        teamSize: 1,
+        noBots: true,
+      });
+    } else {
+      this.menu.show();
+    }
 
     const unlockAudio = (): void => {
       void this.sound.unlock().then(() => { this.sound.startMusic(); });
@@ -371,6 +397,9 @@ export class App {
       (hit) => this.match.handleProjectileHit(hit, this.player, this.cam),
     );
     this.tickGunTuning();
+
+    checkPortalCollisions(this.player.getPosition(), this.player.phys.vel.y);
+    updateVibeJamPortals(this.sceneMgr.getCamera().position, dt);
 
     if (FEATURE_FLAGS.thirdPersonLookBehind && this.input.consumeThirdPersonToggle()) {
       this.thirdPerson = !this.thirdPerson;
@@ -745,18 +774,47 @@ export class App {
   private beginNewRound(): void {
     this.hud.hideRoundEnd();
     this.projectiles.clear();
+    clearVibeJamPortals();
 
     const layout = generateArenaLayout();
     this.arena.loadLayout(layout);
-    this.match.resetForRound(this.arena, this.player);
+
+    const arrivalThisRound = this.portalArrivalPending;
+    const arrivalCenter = this.arena.getBreachRoomCenter(this.player.team);
+    const arrivalOpenAxis = this.arena.getBreachOpenAxis(this.player.team);
+    const arrivalOpenSign = this.arena.getBreachOpenSign(this.player.team);
+    configurePortalArrivalSpawn(arrivalCenter, arrivalOpenAxis, arrivalOpenSign);
+
+    const enemyTeam = (1 - this.player.team) as 0 | 1;
+    configureOutboundPortal(
+      this.arena.getBreachRoomCenter(enemyTeam),
+      this.arena.getBreachOpenAxis(enemyTeam),
+      this.arena.getBreachOpenSign(enemyTeam),
+    );
+
+    this.match.resetForRound(
+      this.arena,
+      this.player,
+      arrivalThisRound ? PORTAL_ARRIVAL_SPAWN : undefined,
+    );
 
     const openAxis = this.arena.getBreachOpenAxis(this.player.team);
     const openSign = this.arena.getBreachOpenSign(this.player.team);
     this.cam.resetForBreachSpawn(cameraYawFacingBreachOpening(openAxis, openSign));
 
+    initVibeJamPortal(this.sceneMgr.getScene(), this.portalParams);
+    this.match.addOutboundVibeJamPortal(this.portalParams);
+
     this.arena.setPortalDoorsOpen(false);
-    this.round.startCountdown();
-    this.sound.playCountdown();
+    if (arrivalThisRound) {
+      this.round.startCountdown();
+      this.round.tick(999);
+      this.cleanPortalUrl();
+      this.portalArrivalPending = false;
+    } else {
+      this.round.startCountdown();
+      this.sound.playCountdown();
+    }
   }
 
   private onRoundWin(team: 0 | 1): void {
@@ -836,6 +894,7 @@ export class App {
     this.appMode = "menu";
     this.matchOver = false;
     this.projectiles.clear();
+    clearVibeJamPortals();
     this.hud.setVisible(false);
     this.hud.hideRoundEnd();
     this.killFeed.setVisible(false);
@@ -927,6 +986,13 @@ export class App {
     this.sound.setMusicEnabled(settings.soundtrackEnabled);
   }
 
+  private cleanPortalUrl(): void {
+    if (this.portalUrlCleaned || typeof window === "undefined") return;
+    if (!window.location.search) return;
+    history.replaceState(null, "", window.location.pathname);
+    this.portalUrlCleaned = true;
+  }
+
   private getOnlineLocalActorId(): string {
     return this.net.getSessionId() ?? "local-player";
   }
@@ -957,6 +1023,12 @@ export class App {
     this.sessionMenu.setLauncherVisible(true);
 
     this.player.team = 0;
+    this.portalParams = {
+      ...this.portalParams,
+      color: this.portalParams.color ?? "cyan",
+      team: this.portalParams.team ?? "0",
+      username: selection.name,
+    };
     this.match.startNewGame({
       humanName: selection.name,
       humanTeam: 0,
@@ -967,7 +1039,7 @@ export class App {
     if (this.mobile) {
       this.input.setMobileControlsActive(true);
       this.mobileControls?.show();
-    } else {
+    } else if (!this.portalArrivalPending) {
       this.input.lockPointer(this.sceneMgr.getRenderer().domElement);
     }
 
@@ -1019,6 +1091,7 @@ export class App {
     if (this.matchEndHandle) { clearTimeout(this.matchEndHandle); this.matchEndHandle = null; }
     this.onlineMatch.dispose();
     this.multiplayer.hide();
+    clearVibeJamPortals();
     this.hud.setVisible(false);
     this.hud.hideRoundEnd();
     this.killFeed.setVisible(false);

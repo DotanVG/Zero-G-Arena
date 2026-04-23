@@ -1,6 +1,8 @@
 import { FIRE_RATE } from '../../shared/constants';
 import { applyMobileLookDelta, mergeWalkAxes, type MobileLookState } from './input/mobileInputLogic';
 
+const MAX_MOUSE_EVENT_DELTA = 120;
+
 export class InputManager {
   private keys          = new Set<string>();
   private mouseDx       = 0;
@@ -62,12 +64,14 @@ export class InputManager {
 
     window.addEventListener('mousemove', (e) => {
       if (!this.isLocked()) return;
-      this.mouseDx += e.movementX;
+      const movementX = clampMouseDelta(e.movementX);
+      const movementY = clampMouseDelta(e.movementY);
+      this.mouseDx += movementX;
       // Route Y delta: aiming mode → power control; otherwise → camera pitch
       if (this.aimingActive) {
-        this.aimDy += e.movementY;
+        this.aimDy += movementY;
       } else {
-        this.mouseDy += e.movementY;
+        this.mouseDy += movementY;
       }
     });
 
@@ -356,4 +360,10 @@ export class InputManager {
     this.menuTogglePressed = false;
     // mobileControlsActive is intentionally preserved across blur/visibility changes
   }
+}
+
+function clampMouseDelta(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (Math.abs(value) <= MAX_MOUSE_EVENT_DELTA) return value;
+  return Math.sign(value) * MAX_MOUSE_EVENT_DELTA;
 }

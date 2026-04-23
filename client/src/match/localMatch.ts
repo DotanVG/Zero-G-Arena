@@ -22,6 +22,8 @@ import {
   type PhysicsState,
 } from "../physics";
 import { LocalPlayer } from "../player";
+import { addOutboundVibeJamPortal } from "../game/portal/vibeJamPortal";
+import type { PortalParams } from "../game/portal/parsePortalParams";
 import { ArenaQueryAdapter } from "./arenaQueryAdapter";
 import {
   buildBarGraph,
@@ -139,7 +141,11 @@ export class LocalMatch {
     this.rebuildBots();
   }
 
-  public resetForRound(arena: Arena, player: LocalPlayer): void {
+  public resetForRound(
+    arena: Arena,
+    player: LocalPlayer,
+    humanSpawnOverride?: { x: number; y: number; z: number },
+  ): void {
     this.roundResolved = false;
     this.roundSeed += 1;
 
@@ -160,9 +166,9 @@ export class LocalMatch {
     ).map((slot) => settleSpawnOnFloor(slot, query, 1));
 
     if (this.config.humanTeam === 0) {
-      player.resetForNewRound(arena, team0Slots.shift());
+      player.resetForNewRound(arena, humanSpawnOverride ?? team0Slots.shift());
     } else {
-      player.resetForNewRound(arena, team1Slots.shift());
+      player.resetForNewRound(arena, humanSpawnOverride ?? team1Slots.shift());
     }
 
     const team0Bots = this.bots.filter((bot) => bot.team === 0);
@@ -180,6 +186,10 @@ export class LocalMatch {
 
   public getScore(): { team0: number; team1: number } {
     return { ...this.score };
+  }
+
+  public addOutboundVibeJamPortal(params: PortalParams): void {
+    addOutboundVibeJamPortal(this.scene, params);
   }
 
   public getHudRosters(player: LocalPlayer): { ownTeam: FullPlayerInfo[]; enemyTeam: EnemyPlayerInfo[] } {

@@ -399,7 +399,7 @@ export class App {
     this.tickGunTuning();
 
     checkPortalCollisions(this.player.getPosition(), this.player.phys.vel.y);
-    updateVibeJamPortals(dt);
+    updateVibeJamPortals(this.sceneMgr.getCamera().position, dt);
 
     if (FEATURE_FLAGS.thirdPersonLookBehind && this.input.consumeThirdPersonToggle()) {
       this.thirdPerson = !this.thirdPerson;

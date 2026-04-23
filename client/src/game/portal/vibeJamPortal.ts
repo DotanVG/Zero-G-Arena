@@ -18,9 +18,10 @@ export const PORTAL_ARRIVAL_SPAWN = new THREE.Vector3(
 interface PortalTrigger {
   box: THREE.Box3;
   group: THREE.Group;
+  label: THREE.Mesh;
+  shaderMat: THREE.ShaderMaterial;
   targetUrl: string;
   type: "return" | "outbound";
-  shaderMat: THREE.ShaderMaterial;
 }
 
 // ── Shaders ──────────────────────────────────────────────────────────────────
@@ -34,7 +35,6 @@ void main() {
 
 const PORTAL_FRAG = /* glsl */`
 uniform float time;
-uniform vec3 col;
 varying vec2 vUv;
 #define TAU 6.28318530718
 
@@ -54,21 +54,32 @@ void main() {
   // Outer neon glow rim
   float glowRim = exp(-pow((r - 0.82) / 0.09, 2.0));
 
-  // Inner core brightening
+  // Inner core
   float core = exp(-r * r * 6.0) * 0.5;
 
-  // Masks
   float edgeFade = 1.0 - smoothstep(0.80, 1.0, r);
   float voidFade = smoothstep(0.0, 0.25, r);
 
   float intensity = (arms * rings * 0.6 + glowRim * 1.5 + core) * voidFade;
   intensity = clamp(intensity, 0.0, 1.5);
 
-  vec3 color = col * intensity;
-  color += vec3(1.0) * (glowRim + core) * 0.35;
+  // Rick & Morty green/cyan/magenta palette
+  vec3 green   = vec3(0.05, 1.0,  0.35);
+  vec3 cyan    = vec3(0.0,  0.85, 1.0);
+  vec3 magenta = vec3(0.9,  0.1,  0.85);
+
+  float swt = fract(a / TAU + r * 3.0 - time * 0.3);
+  vec3 swColor = swt < 0.5
+    ? mix(green, cyan,    smoothstep(0.0, 0.5, swt))
+    : mix(cyan,  magenta, smoothstep(0.5, 1.0, swt));
+
+  vec3 color = swColor * intensity;
+  color += vec3(0.9, 1.0, 0.88) * (glowRim + core) * 0.5;
+
+  float pulse = 0.88 + 0.12 * sin(time * 2.8);
+  color *= pulse;
 
   float alpha = edgeFade * clamp(intensity * 0.8 + 0.35 * voidFade * edgeFade, 0.0, 1.0);
-
   gl_FragColor = vec4(color, alpha);
 }`;
 
@@ -177,9 +188,14 @@ export function checkPortalCollisions(playerPos: THREE.Vector3, velY: number): v
   }
 }
 
-export function updateVibeJamPortals(dt: number): void {
+export function updateVibeJamPortals(cameraPos: THREE.Vector3, dt: number): void {
   for (const trigger of triggers) {
     trigger.shaderMat.uniforms["time"].value += dt;
+
+    // Y-axis-only billboard: rotate label to face camera without tilting into wall
+    const dx = cameraPos.x - trigger.label.position.x;
+    const dz = cameraPos.z - trigger.label.position.z;
+    trigger.label.rotation.y = Math.atan2(dx, dz);
   }
 }
 
@@ -194,7 +210,9 @@ function clearTriggers(type?: PortalTrigger["type"]): void {
     const trigger = triggers[i];
     if (type && trigger.type !== type) continue;
     sceneRef?.remove(trigger.group);
+    sceneRef?.remove(trigger.label);
     disposeObject(trigger.group);
+    disposeObject(trigger.label);
     triggers.splice(i, 1);
   }
 }
@@ -258,39 +276,52 @@ function createPortal(
 
   // Animated shader disc
   const shaderMat = new THREE.ShaderMaterial({
-    uniforms: {
-      time: { value: 0 },
-      col: { value: new THREE.Color(options.color) },
-    },
+    uniforms: { time: { value: 0 } },
     vertexShader: PORTAL_VERT,
     fragmentShader: PORTAL_FRAG,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
-
   const disc = new THREE.Mesh(new THREE.CircleGeometry(PORTAL_RADIUS, 64), shaderMat);
   group.add(disc);
 
-  // Soft additive glow halo behind the disc
+  // Neon ring (portal-specific color)
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: options.color,
+    transparent: true,
+    opacity: 0.95,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(PORTAL_RADIUS, 0.1, 16, 64), ringMat);
+  group.add(ring);
+
+  // Outer halo (soft glow)
   const haloMat = new THREE.MeshBasicMaterial({
     color: options.color,
     transparent: true,
-    opacity: 0.12,
+    opacity: 0.28,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
-  const halo = new THREE.Mesh(new THREE.CircleGeometry(PORTAL_RADIUS * 1.35, 32), haloMat);
-  halo.position.z = -0.02;
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(PORTAL_RADIUS + 0.1, 0.22, 16, 64),
+    haloMat,
+  );
   group.add(halo);
 
-  // Wall-parallel label (Mesh, not Sprite — stays flat on wall, no camera tilt)
-  const label = createLabelMesh(options.label, options.color);
-  label.position.set(0, PORTAL_RADIUS + 0.65, 0.02);
-  group.add(label);
-
   scene.add(group);
+
+  // Label lives in world space so we can Y-billboard it independently
+  const labelWorldPos = new THREE.Vector3(
+    options.position.x,
+    options.position.y + PORTAL_RADIUS + 0.65,
+    options.position.z,
+  );
+  const label = createLabelMesh(options.label, options.color, labelWorldPos);
+  scene.add(label);
 
   // Box collider sized to the disc
   const triggerCenter = options.position
@@ -303,7 +334,7 @@ function createPortal(
   );
   const box = boxFromOrientedPortal(triggerCenter, options.normal, halfSize);
 
-  return { box, group, targetUrl: options.targetUrl, type: options.type, shaderMat };
+  return { box, group, label, shaderMat, targetUrl: options.targetUrl, type: options.type };
 }
 
 function boxFromOrientedPortal(
@@ -335,7 +366,7 @@ function dominantAxis(v: THREE.Vector3): "x" | "y" | "z" {
   return "z";
 }
 
-function createLabelMesh(text: string, color: number): THREE.Mesh {
+function createLabelMesh(text: string, color: number, worldPos: THREE.Vector3): THREE.Mesh {
   const canvas = document.createElement("canvas");
   canvas.width = 768;
   canvas.height = 192;
@@ -365,6 +396,7 @@ function createLabelMesh(text: string, color: number): THREE.Mesh {
     depthWrite: false,
   });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.95), mat);
+  mesh.position.copy(worldPos);
   return mesh;
 }
 

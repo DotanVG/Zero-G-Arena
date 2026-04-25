@@ -22,7 +22,7 @@ export function buildRoundEndHtml(
   const teamHtml = buildRoundEndTeamSpan(result.team);
 
   if (result.matchScore) {
-    return `<span class="ob-round-end__line">${teamHtml}<span class="ob-round-end__text">BREACHED THE MATCH</span><span class="ob-round-end__score">${result.matchScore.team0} - ${result.matchScore.team1}</span></span>`;
+    return `<span class="ob-round-end__line">${teamHtml}<span class="ob-round-end__text">WINS</span><span class="ob-round-end__score">${result.matchScore.team0} - ${result.matchScore.team1}</span></span>`;
   }
 
   if (result.kind === "freeze") {

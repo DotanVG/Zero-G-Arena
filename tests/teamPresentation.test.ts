@@ -86,7 +86,7 @@ describe("player-relative team UI helpers", () => {
     expect(freezeHtml).toContain("MAGENTA");
     expect(freezeHtml).toContain("CYAN");
     expect(matchHtml).toContain("ob-round-end__team--cyan");
-    expect(matchHtml).toContain("BREACHED THE MATCH");
+    expect(matchHtml).toContain("WINS");
     expect(matchHtml).toContain("5 - 3");
     expect(tieHtml).toContain(">TIE<");
   });

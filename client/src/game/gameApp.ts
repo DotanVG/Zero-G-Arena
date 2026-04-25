@@ -45,6 +45,7 @@ import {
 import type { PortalParams } from "./portal/parsePortalParams";
 
 const PLAYER_UPDATE_RATE = 0.05; // 20hz
+const ONLINE_MATCH_DEBRIEF_DELAY_MS = 4000;
 
 export class App {
   private appMode: "menu" | "solo" | "online" = "menu";
@@ -180,8 +181,9 @@ export class App {
       this.previousOnlinePhase = snapshot.phase;
 
       if (this.onlineMatchConcluding) {
-        if (!this.debrief.isVisible() && (snapshot.matchComplete || snapshot.phase === "LOBBY")) {
-          this.endOnlineGame();
+        if (this.onlineGameActive) {
+          this.arena.setPortalDoorsOpen(snapshot.phase === "PLAYING");
+          this.onlineMatch.applySnapshot(snapshot.actors, snapshot.sessionId);
         }
         return;
       }
@@ -249,7 +251,27 @@ export class App {
       if (event.matchWinner !== null && event.finalScore) {
         this.onlineMatchConcluding = true;
         this.pendingOnlineDebrief = this.buildOnlineDebrief(event.matchWinner, event.finalScore);
-        this.endOnlineGame();
+        const label = event.matchWinner === 0 ? "CYAN" : "MAGENTA";
+        this.hud.showRoundEnd(
+          `${label} WINS THE MATCH  ${event.finalScore.team0} - ${event.finalScore.team1}`,
+        );
+        this.input.exitPointerLock();
+        this.input.setUiBlocked(true);
+        this.mobileControls?.hide();
+        this.input.setMobileControlsActive(false);
+        this.sessionMenu.setLauncherVisible(false);
+        if (this.matchEndHandle) {
+          clearTimeout(this.matchEndHandle);
+        }
+        this.matchEndHandle = setTimeout(() => {
+          this.matchEndHandle = null;
+          const debrief = this.pendingOnlineDebrief;
+          this.pendingOnlineDebrief = null;
+          if (!debrief || this.appMode !== "online") {
+            return;
+          }
+          this.showMatchDebrief(debrief);
+        }, ONLINE_MATCH_DEBRIEF_DELAY_MS);
         return;
       }
 
@@ -658,18 +680,12 @@ export class App {
     this.mobileControls?.hide();
     this.input.setMobileControlsActive(false);
 
-    if (this.pendingOnlineDebrief) {
-      const debrief = this.pendingOnlineDebrief;
-      this.pendingOnlineDebrief = null;
-      this.showMatchDebrief(debrief);
-    } else {
-      const snap = this.latestOnlineSnapshot;
-      if (snap) {
-        this.multiplayer.render(snap);
-      }
-      this.hud.setVisible(false);
-      this.hud.hideRoundEnd();
+    const snap = this.latestOnlineSnapshot;
+    if (snap) {
+      this.multiplayer.render(snap);
     }
+    this.hud.setVisible(false);
+    this.hud.hideRoundEnd();
   }
 
   // ── HUD updates ─────────────────────────────────────────────────────────────
@@ -1253,8 +1269,10 @@ export class App {
 
   private returnToOnlineLobbyFromDebrief(): void {
     this.onlineMatchConcluding = false;
+    this.onlineGameActive = false;
     this.input.setUiBlocked(false);
     this.sessionMenu.setLauncherVisible(true);
+    this.hud.hideRoundEnd();
 
     if (this.latestOnlineSnapshot) {
       this.multiplayer.render(this.latestOnlineSnapshot);

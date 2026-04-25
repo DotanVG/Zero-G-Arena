@@ -23,14 +23,22 @@ export interface DebriefData {
 const CSS = `
   .ob-debrief-root {
     position: fixed; inset: 0; z-index: 450;
-    display: none; align-items: center; justify-content: center; padding: 18px;
+    display: flex; align-items: center; justify-content: center; padding: 18px;
     background:
-      radial-gradient(circle at top, rgba(18, 41, 64, 0.82), rgba(4, 8, 18, 0.96) 55%, rgba(0, 0, 0, 0.99));
+      radial-gradient(circle at top, rgba(18, 41, 64, 0.48), rgba(4, 8, 18, 0.72) 55%, rgba(0, 0, 0, 0.82));
     color: #e8ecf4;
     font-family: "Cormorant Garamond", serif;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 320ms ease, visibility 320ms ease;
   }
   .ob-debrief-root * { box-sizing: border-box; }
-  .ob-debrief-root.ob-debrief-visible { display: flex; }
+  .ob-debrief-root.ob-debrief-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
 
   .ob-debrief-wrap {
     width: min(1100px, 94vw);

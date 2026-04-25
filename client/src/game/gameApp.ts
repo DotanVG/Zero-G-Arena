@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS } from "../../../shared/constants";
+import { GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS, MATCH_POINT_TARGET } from "../../../shared/constants";
 import { generateArenaLayout } from "../../../shared/arena-gen";
+import { findMatchWinner } from "../../../shared/match-flow";
 import type { MultiplayerRoomSnapshot } from "../../../shared/multiplayer";
 import { Arena } from "../arena/arena";
 import { CameraController } from "../camera";
@@ -52,6 +53,7 @@ const ONLINE_MATCH_DEBRIEF_DELAY_MS = 4000;
 export class App {
   private appMode: "menu" | "solo" | "online" = "menu";
   private onlineGameActive = false;
+  private onlineRoundActive = false;
   private onlineSessionToken = 0;
   private isUserExitingOnline = false;
   private matchOver = false;
@@ -187,6 +189,7 @@ export class App {
       this.previousOnlinePhase = snapshot.phase;
 
       if (this.onlineMatchConcluding) {
+        this.onlineRoundActive = false;
         if (this.onlineGameActive) {
           this.arena.setPortalDoorsOpen(snapshot.phase === "PLAYING");
           this.onlineMatch.applySnapshot(snapshot.actors, snapshot.sessionId);
@@ -216,6 +219,7 @@ export class App {
       }
 
       if (this.onlineGameActive) {
+        this.onlineRoundActive = snapshot.phase === "PLAYING";
         this.arena.setPortalDoorsOpen(snapshot.phase === "PLAYING");
         this.onlineMatch.applySnapshot(snapshot.actors, snapshot.sessionId);
       }
@@ -242,6 +246,11 @@ export class App {
       if (this.isUserExitingOnline || this.appMode !== "online") return;
       if (!this.onlineGameActive) return;
 
+      if (event.reason === "breach") {
+        this.disableOnlineProjectiles();
+      } else {
+        this.onlineRoundActive = false;
+      }
       this.projectiles.clear();
       this.onlineBreachReported = false;
 
@@ -299,7 +308,7 @@ export class App {
 
     this.net.onShotEvent = (event) => {
       if (this.isUserExitingOnline || this.appMode !== "online") return;
-      if (!this.onlineGameActive) return;
+      if (!this.onlineGameActive || !this.onlineRoundActive) return;
       if (event.ownerId === this.getOnlineLocalActorId()) return;
 
       this.projectiles.spawn(
@@ -538,7 +547,7 @@ export class App {
       || this.player.phase === "GRABBING"
       || this.player.phase === "AIMING";
 
-    if (!this.onlineGameActive) return;
+    if (!this.onlineGameActive || !this.onlineRoundActive) return;
     if (!this.input.canControlGame() || !inZeroG) return;
     if (!this.player.canFire() || !this.input.consumeFire()) return;
 
@@ -622,11 +631,17 @@ export class App {
     this.player.currentBreachTeam = enemyTeam;
     this.player.phase = "BREACH";
     this.onlineBreachReported = true;
+    this.disableOnlineProjectiles();
 
     this.net.sendBreachReport({
       scorerTeam: this.player.team,
       scorerName: this.onlinePlayerName,
     });
+  }
+
+  private disableOnlineProjectiles(): void {
+    this.onlineRoundActive = false;
+    this.projectiles.clear();
   }
 
   private sendOnlinePlayerUpdate(): void {
@@ -659,6 +674,7 @@ export class App {
     }
 
     this.onlineGameActive = true;
+    this.onlineRoundActive = snapshot.phase === "PLAYING";
     this.onlineBreachReported = false;
     this.playerUpdateTimer = 0;
     this.tutorial.beginRun();
@@ -713,6 +729,7 @@ export class App {
     this.sound.stopCountdown();
     this.closeSessionMenu();
     this.onlineGameActive = false;
+    this.onlineRoundActive = false;
     this.onlineBreachReported = false;
 
     this.onlineMatch.dispose();
@@ -889,10 +906,14 @@ export class App {
   private onRoundWin(team: 0 | 1, reason: "breach" | "fullFreeze"): void {
     if (!this.round.isPlaying()) return;
     this.projectiles.clear();
+    const score = this.match.getScore();
+    const matchWinner = findMatchWinner(score, MATCH_POINT_TARGET);
     this.hud.showRoundEnd(
-      reason === "fullFreeze"
-        ? buildRoundEndHtml({ team, kind: "freeze", enemyTeam: (1 - team) as 0 | 1 })
-        : buildRoundEndHtml({ team }),
+      matchWinner !== null
+        ? buildRoundEndHtml({ team, matchScore: score })
+        : reason === "fullFreeze"
+          ? buildRoundEndHtml({ team, kind: "freeze", enemyTeam: (1 - team) as 0 | 1 })
+          : buildRoundEndHtml({ team }),
     );
     this.round.endRound();
   }
@@ -954,8 +975,8 @@ export class App {
       score: finalScore,
       players: [...ownPlayers, ...enemyPlayers],
       playerTeam,
-      primaryActionLabel: "Return To Room",
       secondaryActionLabel: "Main Menu",
+      primaryActionLabel: "Play Again",
       matchLabel: `${sizeLabelMap[teamSize] ?? "Solo"} · ${finalScore.team0} – ${finalScore.team1}`,
     };
 
@@ -1170,6 +1191,7 @@ export class App {
     this.appMode = "online";
     this.onlinePlayerName = selection.name;
     this.onlineGameActive = false;
+    this.onlineRoundActive = false;
     this.onlineBreachReported = false;
     this.onlineMatchConcluding = false;
     this.pendingOnlineDebrief = null;
@@ -1223,6 +1245,7 @@ export class App {
     this.debrief.hide();
     this.appMode = "menu";
     this.onlineGameActive = false;
+    this.onlineRoundActive = false;
     this.cursor.show();
     this.onlineBreachReported = false;
     this.onlineMatchConcluding = false;
@@ -1321,6 +1344,8 @@ export class App {
       score: finalScore,
       players,
       playerTeam,
+      secondaryActionLabel: "Main Menu",
+      primaryActionLabel: "Return To Lobby",
       matchLabel: `${sizeLabelMap[teamSize] ?? `${teamSize}v${teamSize}`} Online · ${finalScore.team0} – ${finalScore.team1}`,
     };
   }
@@ -1328,7 +1353,10 @@ export class App {
   private returnToOnlineLobbyFromDebrief(): void {
     this.onlineMatchConcluding = false;
     this.onlineGameActive = false;
+    this.onlineRoundActive = false;
     this.input.setUiBlocked(false);
+    this.onlineMatch.dispose();
+    this.projectiles.clear();
     this.sessionMenu.setLauncherVisible(true);
     this.hud.hideRoundEnd();
 

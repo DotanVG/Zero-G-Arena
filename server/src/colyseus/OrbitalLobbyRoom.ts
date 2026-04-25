@@ -241,7 +241,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
   // ── Match message handlers ──────────────────────────────────────────────────
 
   private handlePlayerUpdateMessage(client: RoomClient, message: PlayerUpdateMessage): void {
-    if (this.state.phase !== "PLAYING") return;
+    if (this.state.phase !== "PLAYING" && this.state.phase !== "ROUND_END") return;
     const actor = this.state.actors.get(client.sessionId);
     if (!actor || actor.isBot) return;
 
@@ -439,7 +439,6 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     this.state.phase = "ROUND_END";
     this.state.countdownRemaining = 0;
     this.state.roundTimeRemaining = 0;
-    this.clearActors();
 
     this.roundEndTimer = setTimeout(() => {
       this.roundEndTimer = null;

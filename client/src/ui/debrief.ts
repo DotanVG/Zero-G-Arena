@@ -18,6 +18,8 @@ export interface DebriefData {
   matchLabel: string;
   primaryActionLabel?: string;
   secondaryActionLabel?: string;
+  showPrimaryAction?: boolean;
+  showSecondaryAction?: boolean;
 }
 
 const CSS = `
@@ -351,11 +353,11 @@ export class DebriefScreen {
 
     const mainMenuButton = this.root.querySelector<HTMLButtonElement>("#debrief-main-menu");
     if (mainMenuButton && data.secondaryActionLabel) {
-      mainMenuButton.textContent = `${data.secondaryActionLabel} ->`;
+      mainMenuButton.textContent = data.secondaryActionLabel;
     }
     const primaryActionButton = this.root.querySelector<HTMLButtonElement>("#debrief-play-again");
     if (primaryActionButton && data.primaryActionLabel) {
-      primaryActionButton.textContent = `${data.primaryActionLabel} ->`;
+      primaryActionButton.textContent = data.primaryActionLabel;
     }
 
     mainMenuButton?.addEventListener("click", () => { this.hide(); this.onMainMenu?.(); });
@@ -377,6 +379,8 @@ export class DebriefScreen {
 
   private buildHtml(data: DebriefData): string {
     const { score, winningTeam, players, playerTeam, matchLabel } = data;
+    const showSecondaryAction = data.showSecondaryAction ?? true;
+    const showPrimaryAction = data.showPrimaryAction ?? true;
     const mainMenuLabel = data.secondaryActionLabel ?? "Main Menu";
     const primaryActionLabel = data.primaryActionLabel ?? "Play Again";
 
@@ -401,6 +405,12 @@ export class DebriefScreen {
     }).join("");
 
     const awards = this.buildAwards(players);
+    const secondaryAction = showSecondaryAction
+      ? `<button class="ob-debrief-btn" id="debrief-main-menu">${escapeHtml(mainMenuLabel)}</button>`
+      : "";
+    const primaryAction = showPrimaryAction
+      ? `<button class="ob-debrief-btn ob-debrief-btn--primary" id="debrief-play-again">${escapeHtml(primaryActionLabel)}</button>`
+      : "";
 
     return `
       <div class="ob-debrief-wrap">
@@ -436,8 +446,8 @@ export class DebriefScreen {
           <div class="ob-debrief-side">
             <div class="ob-awards">${awards}</div>
             <div class="ob-debrief-actions">
-              <button class="ob-debrief-btn" id="debrief-main-menu">Main Menu →</button>
-              <button class="ob-debrief-btn ob-debrief-btn--primary" id="debrief-play-again">Play Again →</button>
+              ${secondaryAction}
+              ${primaryAction}
             </div>
           </div>
         </div>

@@ -662,6 +662,7 @@ export class App {
     this.onlineBreachReported = false;
     this.playerUpdateTimer = 0;
     this.tutorial.beginRun();
+    this.cursor.hide();
 
     this.multiplayer.hide();
     this.hud.setVisible(true);
@@ -1164,7 +1165,6 @@ export class App {
   private async startOnlineLobby(selection: PlaySelection): Promise<void> {
     this.appMode = "online";
     this.onlinePlayerName = selection.name;
-    this.cursor.hide();
     this.onlineGameActive = false;
     this.onlineBreachReported = false;
     this.onlineMatchConcluding = false;
@@ -1274,6 +1274,7 @@ export class App {
     this.hud.setVisible(false);
     this.hud.hideRoundEnd();
     this.killFeed.setVisible(false);
+    this.cursor.show();
     this.debrief.show(data);
   }
 

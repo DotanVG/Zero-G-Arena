@@ -8,6 +8,7 @@ import {
   PLAYER_RADIUS,
 } from '../../../shared/constants';
 import { clamp } from '../util/math';
+import type { OnlineActorSnapshot } from '../../../shared/multiplayer';
 import { type DamageState, type PlayerPhase } from '../../../shared/schema';
 import { CameraController } from '../camera';
 import { InputManager } from '../input';
@@ -619,6 +620,32 @@ export class LocalPlayer {
     this.phase = 'BREACH';
   }
 
+  public applyAuthoritativeOnlineState(actor: Pick<
+    OnlineActorSnapshot,
+    'deaths' | 'frozen' | 'kills' | 'leftArm' | 'leftLeg' | 'phase' | 'rightArm' | 'rightLeg'
+  >): void {
+    this.damage.frozen = actor.frozen;
+    this.damage.leftArm = actor.leftArm;
+    this.damage.rightArm = actor.rightArm;
+    this.damage.leftLeg = actor.leftLeg;
+    this.damage.rightLeg = actor.rightLeg;
+    this.kills = actor.kills;
+    this.deaths = actor.deaths;
+    this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
+
+    const nextPhase = this.damage.frozen
+      ? 'FROZEN'
+      : this.normalizeOnlinePhase(actor.phase);
+
+    if (nextPhase !== 'GRABBING' && nextPhase !== 'AIMING') {
+      this.grabbedBarPos = null;
+      this.grabHandGripLocal = null;
+      this.grabPoseLocked = false;
+    }
+
+    this.phase = nextPhase;
+  }
+
   public getPosition(): THREE.Vector3 {
     return this.phys.pos;
   }
@@ -740,6 +767,22 @@ export class LocalPlayer {
 
   public getFrozenTimer(): number {
     return 0;
+  }
+
+  private normalizeOnlinePhase(phase: string): PlayerPhase {
+    switch (phase) {
+      case 'AIMING':
+      case 'BREACH':
+      case 'FLOATING':
+      case 'FROZEN':
+      case 'GRABBING':
+      case 'RESPAWNING':
+        return this.damage.leftArm && (phase === 'GRABBING' || phase === 'AIMING')
+          ? 'FLOATING'
+          : phase;
+      default:
+        return 'FLOATING';
+    }
   }
 
   private applyTeamVisuals(): void {

@@ -35,6 +35,7 @@ import {
   PLAYER_RADIUS,
 } from "../../../shared/constants";
 import type { PlayerPhase } from "../../../shared/schema";
+import { applyHitToOnlineActor, isHitZone, normalizeAuthoritativePhase } from "./actorDamage";
 import { ActorState, LobbyMemberState, OrbitalLobbyState } from "./state";
 
 type RoomClient = Client;
@@ -258,14 +259,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     actor.velZ = clampFinite(Number(message.velZ), -VEL_CLAMP, VEL_CLAMP);
     actor.yaw = clampFinite(Number(message.yaw), -Math.PI * 2, Math.PI * 2);
     const rawPhase = String(message.phase ?? "");
-    actor.phase = (VALID_PHASES.has(rawPhase) ? rawPhase : "FLOATING") as PlayerPhase;
-    actor.frozen = Boolean(message.frozen);
-    actor.leftArm = Boolean(message.leftArm);
-    actor.rightArm = Boolean(message.rightArm);
-    actor.leftLeg = Boolean(message.leftLeg);
-    actor.rightLeg = Boolean(message.rightLeg);
-    actor.kills = Math.min(MAX_KILLS, Math.max(0, Math.trunc(Number(message.kills)) || 0));
-    actor.deaths = Math.min(MAX_KILLS, Math.max(0, Math.trunc(Number(message.deaths)) || 0));
+    actor.phase = normalizeAuthoritativePhase(rawPhase, actor);
   }
 
   private handleShotEventMessage(client: RoomClient, message: ShotEventMessage): void {
@@ -303,12 +297,21 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     const targetId = String(message.targetId ?? "").slice(0, 64);
     const target = this.state.actors.get(targetId);
     if (!target || target.frozen || target.team === shooter.team) return;
+    if (!isHitZone(message.zone)) return;
 
-    target.frozen = true;
-    target.phase = "FROZEN";
-    target.deaths += 1;
+    if (target.isBot) {
+      target.frozen = true;
+      target.phase = "FROZEN";
+      target.deaths += 1;
+    } else {
+      const frozen = applyHitToOnlineActor(target, message.zone);
+      if (!frozen) {
+        return;
+      }
+    }
+
     target.frozenTimer = BOT_RESPAWN_SECONDS;
-    shooter.kills += 1;
+    shooter.kills = Math.min(MAX_KILLS, shooter.kills + 1);
 
     const freezeEvent: FreezeEventMessage = {
       targetId: target.id,
@@ -543,6 +546,10 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
       actor.isBot = member.isBot;
       actor.phase = "BREACH";
       actor.frozen = false;
+      actor.leftArm = false;
+      actor.rightArm = false;
+      actor.leftLeg = false;
+      actor.rightLeg = false;
       actor.kills = 0;
       actor.deaths = 0;
 
@@ -574,6 +581,10 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
         if (actor.frozenTimer <= 0) {
           actor.frozen = false;
           actor.phase = "BREACH";
+          actor.leftArm = false;
+          actor.rightArm = false;
+          actor.leftLeg = false;
+          actor.rightLeg = false;
         }
         continue;
       }

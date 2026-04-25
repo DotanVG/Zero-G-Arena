@@ -1,4 +1,5 @@
 import { MATCH_TEAM_SIZES, type MatchTeamSize } from "./match";
+import type { HitZone } from "./player-logic";
 
 export const MULTIPLAYER_ROOM_NAME = "orbital_lobby";
 export const MULTIPLAYER_COUNTDOWN_SECONDS = 5;
@@ -82,6 +83,7 @@ export interface PlayerUpdateMessage {
 
 export interface HitReportMessage {
   targetId: string;
+  zone: HitZone;
   impX: number;
   impY: number;
   impZ: number;

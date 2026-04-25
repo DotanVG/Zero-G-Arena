@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { HITBOX_OFFSET_Y, HITBOX_RADIUS } from "../../../shared/constants";
 import type { OnlineActorSnapshot } from "../../../shared/multiplayer";
+import { classifyHitZone, type HitZone } from "../../../shared/player-logic";
 import type { PlayerPhase } from "../../../shared/schema";
 import {
   predictPosition,
@@ -126,6 +127,31 @@ export class OnlineMatch {
 
   public triggerRemoteShot(actorId: string): void {
     this.tracks.get(actorId)?.avatar.triggerArmRecoil();
+  }
+
+  public classifyHitZone(actorId: string, impactPoint: THREE.Vector3): HitZone | null {
+    const track = this.tracks.get(actorId);
+    if (!track) return null;
+
+    return classifyHitZone(
+      {
+        x: impactPoint.x,
+        y: impactPoint.y,
+        z: impactPoint.z,
+      },
+      {
+        x: track.renderPos.x,
+        y: track.renderPos.y,
+        z: track.renderPos.z,
+      },
+      {
+        x: -Math.sin(track.renderYaw),
+        y: 0,
+        z: -Math.cos(track.renderYaw),
+      },
+      HITBOX_OFFSET_Y,
+      HITBOX_RADIUS,
+    );
   }
 
   public getProjectileTargets(): OnlineProjectileTarget[] {

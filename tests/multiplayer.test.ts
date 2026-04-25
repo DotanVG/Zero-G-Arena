@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBotName,
+  canJoinMultiplayerRoom,
   canStartLobbyRound,
   getPreferredJoinTeam,
 } from "../shared/multiplayer";
@@ -36,6 +37,15 @@ describe("buildBotName", () => {
   it("uses readable team-prefixed bot names", () => {
     expect(buildBotName(0, 0)).toBe("CY-BOT-01");
     expect(buildBotName(2, 1)).toBe("MG-BOT-03");
+  });
+});
+
+describe("canJoinMultiplayerRoom", () => {
+  it("only allows fresh joins from the lobby", () => {
+    expect(canJoinMultiplayerRoom("LOBBY")).toBe(true);
+    expect(canJoinMultiplayerRoom("COUNTDOWN")).toBe(false);
+    expect(canJoinMultiplayerRoom("PLAYING")).toBe(false);
+    expect(canJoinMultiplayerRoom("ROUND_END")).toBe(false);
   });
 });
 

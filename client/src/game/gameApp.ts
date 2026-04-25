@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS } from "../../../shared/constants";
+import { GRAB_RADIUS, HITBOX_OFFSET_Y, HITBOX_RADIUS, MATCH_POINT_TARGET } from "../../../shared/constants";
 import { generateArenaLayout } from "../../../shared/arena-gen";
+import { findMatchWinner } from "../../../shared/match-flow";
 import type { MultiplayerRoomSnapshot } from "../../../shared/multiplayer";
 import { Arena } from "../arena/arena";
 import { CameraController } from "../camera";
@@ -905,10 +906,14 @@ export class App {
   private onRoundWin(team: 0 | 1, reason: "breach" | "fullFreeze"): void {
     if (!this.round.isPlaying()) return;
     this.projectiles.clear();
+    const score = this.match.getScore();
+    const matchWinner = findMatchWinner(score, MATCH_POINT_TARGET);
     this.hud.showRoundEnd(
-      reason === "fullFreeze"
-        ? buildRoundEndHtml({ team, kind: "freeze", enemyTeam: (1 - team) as 0 | 1 })
-        : buildRoundEndHtml({ team }),
+      matchWinner !== null
+        ? buildRoundEndHtml({ team, matchScore: score })
+        : reason === "fullFreeze"
+          ? buildRoundEndHtml({ team, kind: "freeze", enemyTeam: (1 - team) as 0 | 1 })
+          : buildRoundEndHtml({ team }),
     );
     this.round.endRound();
   }

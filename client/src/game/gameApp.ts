@@ -12,7 +12,7 @@ import type { ProjectileHitEvent } from "../match/localMatch";
 import { isTouchDevice } from "../platform";
 import { LocalPlayer } from "../player";
 import { GunViewModel } from "../render/gun";
-import { HUD } from "../render/hud";
+import { buildRoundEndHtml, HUD } from "../render/hud";
 import { FirstTimeTutorial } from "../render/hud/tutorial";
 import { SceneManager } from "../render/scene";
 import { KillFeed } from "../ui/kill-feed";
@@ -240,7 +240,7 @@ export class App {
       this.onlineBreachReported = false;
 
       if (event.outcome === "tie") {
-        this.hud.showRoundEnd("TIE");
+        this.hud.showRoundEnd(buildRoundEndHtml("tie"));
         return;
       }
 
@@ -252,9 +252,11 @@ export class App {
         this.onlineMatchConcluding = true;
         this.pendingOnlineDebrief = this.buildOnlineDebrief(event.matchWinner, event.finalScore);
         this.sessionMenu.close();
-        const label = event.matchWinner === 0 ? "CYAN" : "MAGENTA";
         this.hud.showRoundEnd(
-          `${label} WINS THE MATCH  ${event.finalScore.team0} - ${event.finalScore.team1}`,
+          buildRoundEndHtml({
+            team: event.matchWinner,
+            matchScore: event.finalScore,
+          }),
         );
         this.input.exitPointerLock();
         this.input.setUiBlocked(true);
@@ -276,7 +278,9 @@ export class App {
         return;
       }
 
-      this.hud.showRoundEnd(event.winningTeam === 0 ? "CYAN WINS" : "MAGENTA WINS");
+      if (event.winningTeam !== null) {
+        this.hud.showRoundEnd(buildRoundEndHtml({ team: event.winningTeam }));
+      }
     };
 
     this.net.onShotEvent = (event) => {
@@ -853,14 +857,14 @@ export class App {
   private onRoundWin(team: 0 | 1): void {
     if (!this.round.isPlaying()) return;
     this.projectiles.clear();
-    this.hud.showRoundEnd(team === 0 ? "CYAN WINS" : "MAGENTA WINS");
+    this.hud.showRoundEnd(buildRoundEndHtml({ team }));
     this.round.endRound();
   }
 
   private onRoundTie(): void {
     if (!this.round.isPlaying()) return;
     this.projectiles.clear();
-    this.hud.showRoundEnd("TIE");
+    this.hud.showRoundEnd(buildRoundEndHtml("tie"));
     this.round.endRound();
   }
 

@@ -7,6 +7,7 @@ import {
   sortDebriefPlayers,
   type DebriefPlayer,
 } from "../client/src/ui/debrief";
+import { buildRoundEndHtml } from "../client/src/render/hud";
 import { getTeamRelationLabel } from "../client/src/ui/multiplayerLobby";
 
 describe("applyTeamAccent", () => {
@@ -67,5 +68,19 @@ describe("player-relative team UI helpers", () => {
     expect(sorted.map((player) => player.id)).toEqual(["self", "magenta-2", "cyan-1"]);
     expect(getDebriefScoreStateClass(1, 1)).toBe("ob-win");
     expect(getDebriefScoreStateClass(0, 1)).toBe("ob-loss");
+  });
+
+  it("formats round-end banners with a colored team name and breached wording", () => {
+    const roundHtml = buildRoundEndHtml({ team: 1 });
+    const matchHtml = buildRoundEndHtml({ team: 0, matchScore: { team0: 5, team1: 3 } });
+    const tieHtml = buildRoundEndHtml("tie");
+
+    expect(roundHtml).toContain("ob-round-end__team--magenta");
+    expect(roundHtml).toContain("MAGENTA");
+    expect(roundHtml).toContain("BREACHED");
+    expect(matchHtml).toContain("ob-round-end__team--cyan");
+    expect(matchHtml).toContain("BREACHED THE MATCH");
+    expect(matchHtml).toContain("5 - 3");
+    expect(tieHtml).toContain(">TIE<");
   });
 });

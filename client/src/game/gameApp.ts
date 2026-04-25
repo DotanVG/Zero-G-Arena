@@ -30,6 +30,7 @@ import { NetClient } from "../net/client";
 import { MultiplayerLobby } from "../ui/multiplayerLobby";
 import type { PlaySelection } from "../ui/menu";
 import { DebriefScreen, type DebriefData, type DebriefPlayer } from "../ui/debrief";
+import { showConfirmDialog } from "../ui/confirmDialog";
 import {
   PORTAL_ARRIVAL_SPAWN,
   checkPortalCollisions,
@@ -48,6 +49,8 @@ const PLAYER_UPDATE_RATE = 0.05; // 20hz
 export class App {
   private appMode: "menu" | "solo" | "online" = "menu";
   private onlineGameActive = false;
+  private onlineSessionToken = 0;
+  private isUserExitingOnline = false;
   private matchOver = false;
   private helpVisible = false;
   private lastSoloSelection: PlaySelection | null = null;
@@ -151,7 +154,7 @@ export class App {
 
     this.debrief.onMainMenu = () => {
       if (this.appMode === "online") {
-        void this.returnToMenuFromOnline();
+        void this.forceLeaveOnline();
         return;
       }
       this.returnToMenuFromSolo();
@@ -169,6 +172,7 @@ export class App {
     };
 
     this.net.onStateChange = (snapshot) => {
+      if (this.isUserExitingOnline || this.appMode !== "online") return;
       this.latestOnlineSnapshot = snapshot;
 
       const prev = this.previousOnlinePhase;
@@ -205,10 +209,12 @@ export class App {
     };
 
     this.net.onLobbyEvent = (event) => {
+      if (this.isUserExitingOnline || this.appMode !== "online") return;
       this.multiplayer.setStatus(event.text, event.type);
     };
 
     this.net.onFreezeEvent = (event) => {
+      if (this.isUserExitingOnline || this.appMode !== "online") return;
       const sessionId = this.net.getSessionId();
       this.killFeed.addKill(event.killerName, event.killerTeam, event.victimName, event.victimTeam);
 
@@ -220,6 +226,7 @@ export class App {
     };
 
     this.net.onRoundResultEvent = (event) => {
+      if (this.isUserExitingOnline || this.appMode !== "online") return;
       if (!this.onlineGameActive) return;
 
       this.projectiles.clear();
@@ -247,6 +254,7 @@ export class App {
     };
 
     this.net.onShotEvent = (event) => {
+      if (this.isUserExitingOnline || this.appMode !== "online") return;
       if (!this.onlineGameActive) return;
       if (event.ownerId === this.getOnlineLocalActorId()) return;
 
@@ -261,13 +269,13 @@ export class App {
     };
 
     this.net.onLeave = () => {
-      if (this.appMode === "online") {
-        void this.returnToMenuFromOnline();
-      }
+      if (this.isUserExitingOnline) return;
+      if (this.appMode !== "online") return;
+      void this.requestLeaveOnline("server_disconnect");
     };
 
     this.multiplayer.onLeaveLobby = () => {
-      void this.returnToMenuFromOnline();
+      void this.requestLeaveOnline("user_exit");
     };
     this.multiplayer.onReadyChange = (ready) => {
       this.net.setReady(ready);
@@ -975,7 +983,42 @@ export class App {
       return;
     }
     if (this.appMode === "online") {
+      await this.requestLeaveOnline("user_exit");
+    }
+  }
+
+  private countOtherHumans(): number {
+    const snap = this.latestOnlineSnapshot;
+    if (!snap) return 0;
+    return snap.members.filter((m) => !m.isBot && m.id !== snap.sessionId).length;
+  }
+
+  private async requestLeaveOnline(
+    reason: "user_exit" | "server_disconnect" | "join_failed",
+  ): Promise<void> {
+    if (this.isUserExitingOnline) return;
+
+    if (reason === "user_exit" && this.countOtherHumans() > 0) {
+      const confirmed = await showConfirmDialog({
+        title: "Leave online room?",
+        body: "Other players are still in this room. Are you sure you want to leave?",
+        confirmLabel: "LEAVE",
+        cancelLabel: "CANCEL",
+      });
+      if (!confirmed) return;
+    }
+
+    await this.forceLeaveOnline();
+  }
+
+  private async forceLeaveOnline(): Promise<void> {
+    if (this.isUserExitingOnline) return;
+    this.isUserExitingOnline = true;
+    this.onlineSessionToken += 1;
+    try {
       await this.returnToMenuFromOnline();
+    } finally {
+      this.isUserExitingOnline = false;
     }
   }
 
@@ -1056,6 +1099,7 @@ export class App {
     this.pendingOnlineDebrief = null;
     if (this.matchEndHandle) { clearTimeout(this.matchEndHandle); this.matchEndHandle = null; }
     this.previousOnlinePhase = null;
+    this.latestOnlineSnapshot = null;
     this.projectiles.clear();
     this.hud.setVisible(false);
     this.killFeed.setVisible(false);
@@ -1066,8 +1110,15 @@ export class App {
     this.sessionMenu.setLauncherVisible(true);
     this.multiplayer.showConnecting(selection.name);
 
+    this.isUserExitingOnline = false;
+    const myToken = ++this.onlineSessionToken;
+
     try {
       const snapshot = await this.net.connect({ name: selection.name });
+      if (myToken !== this.onlineSessionToken || this.isUserExitingOnline || this.appMode !== "online") {
+        try { await this.net.disconnect(); } catch { /* ignore */ }
+        return;
+      }
       this.latestOnlineSnapshot = snapshot;
       this.previousOnlinePhase = snapshot.phase;
       if (snapshot.phase === "COUNTDOWN" || snapshot.phase === "PLAYING") {
@@ -1077,7 +1128,14 @@ export class App {
       }
     } catch (error) {
       console.error("Failed to connect to the multiplayer room.", error);
-      this.multiplayer.setStatus("Could not reach the Colyseus server. Check that the server is running.", "error");
+      if (myToken !== this.onlineSessionToken || this.isUserExitingOnline || this.appMode !== "online") {
+        return;
+      }
+      this.multiplayer.setStatus(
+        "Could not reach the Colyseus server. Check that the server is running.",
+        "error",
+      );
+      await this.requestLeaveOnline("join_failed");
     }
   }
 
@@ -1088,6 +1146,9 @@ export class App {
     this.onlineGameActive = false;
     this.onlineBreachReported = false;
     this.pendingOnlineDebrief = null;
+    this.latestOnlineSnapshot = null;
+    this.previousOnlinePhase = null;
+    this.helpVisible = false;
     if (this.matchEndHandle) { clearTimeout(this.matchEndHandle); this.matchEndHandle = null; }
     this.onlineMatch.dispose();
     this.multiplayer.hide();
@@ -1100,6 +1161,10 @@ export class App {
     this.input.setUiBlocked(false);
     this.input.exitPointerLock();
     this.sessionMenu.setLauncherVisible(false);
+    this.gun.setVisible(false);
+    this.gun.setFrozenTint(null);
+    this.player.setThirdPersonGunVisible(false);
+    this.player.setThirdPersonGunFrozenTint(null);
 
     try {
       await this.net.disconnect();

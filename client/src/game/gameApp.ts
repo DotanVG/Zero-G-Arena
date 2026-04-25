@@ -252,7 +252,10 @@ export class App {
         this.onlineMatchConcluding = true;
         this.pendingOnlineDebrief = this.buildOnlineDebrief(event.matchWinner, event.finalScore);
         this.sessionMenu.close();
-        this.hud.showRoundEnd(this.buildOnlineMatchEndMessage(event.matchWinner, event.finalScore));
+        const label = event.matchWinner === 0 ? "CYAN" : "MAGENTA";
+        this.hud.showRoundEnd(
+          `${label} WINS THE MATCH  ${event.finalScore.team0} - ${event.finalScore.team1}`,
+        );
         this.input.exitPointerLock();
         this.input.setUiBlocked(true);
         this.mobileControls?.hide();
@@ -1269,17 +1272,6 @@ export class App {
       playerTeam,
       matchLabel: `${sizeLabelMap[teamSize] ?? `${teamSize}v${teamSize}`} Online · ${finalScore.team0} – ${finalScore.team1}`,
     };
-  }
-
-  private buildOnlineMatchEndMessage(
-    winningTeam: 0 | 1,
-    finalScore: { team0: number; team1: number },
-  ): string {
-    const label = winningTeam === 0 ? "CYAN" : "MAGENTA";
-    const compactScore = `[${finalScore.team0}-${finalScore.team1}]`;
-    return this.mobile
-      ? `${label} WINS\n${compactScore}`
-      : `${label} WINS THE MATCH\n${compactScore}`;
   }
 
   private returnToOnlineLobbyFromDebrief(): void {

@@ -49,6 +49,7 @@ export interface MultiplayerRoomSnapshot {
   sessionId: string;
   selfTeam: LobbyTeam;
   phase: MultiplayerRoomPhase;
+  matchComplete: boolean;
   countdownRemaining: number;
   roundTimeRemaining: number;
   score: {

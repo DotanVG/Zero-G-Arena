@@ -659,11 +659,7 @@ export class App {
     if (this.pendingOnlineDebrief) {
       const debrief = this.pendingOnlineDebrief;
       this.pendingOnlineDebrief = null;
-      if (this.matchEndHandle) clearTimeout(this.matchEndHandle);
-      this.matchEndHandle = setTimeout(() => {
-        this.matchEndHandle = null;
-        this.showMatchDebrief(debrief);
-      }, 4000);
+      this.showMatchDebrief(debrief);
     } else {
       this.hud.setVisible(false);
       this.hud.hideRoundEnd();
@@ -889,6 +885,8 @@ export class App {
       score: finalScore,
       players: [...ownPlayers, ...enemyPlayers],
       playerTeam,
+      primaryActionLabel: "Return To Room",
+      secondaryActionLabel: "Main Menu",
       matchLabel: `${sizeLabelMap[teamSize] ?? "Solo"} · ${finalScore.team0} – ${finalScore.team1}`,
     };
 

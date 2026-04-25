@@ -29,6 +29,7 @@ const SERVER_URL = getColyseusEndpoint();
 
 type ColyseusRoomState = {
   phase: string;
+  matchComplete: boolean;
   countdownRemaining: number;
   roundTimeRemaining: number;
   scoreTeam0: number;
@@ -152,6 +153,7 @@ function buildSnapshot(
     sessionId: room.sessionId,
     selfTeam: self?.team ?? 0,
     phase: toRoomPhase(state.phase),
+    matchComplete: Boolean(state.matchComplete),
     countdownRemaining: Number(state.countdownRemaining ?? 0),
     roundTimeRemaining: Number(state.roundTimeRemaining ?? 0),
     score: {

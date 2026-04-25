@@ -35,6 +35,7 @@ export class ActorState extends Schema {
 
 export class OrbitalLobbyState extends Schema {
   public phase = "LOBBY";
+  public matchComplete = false;
   public countdownRemaining = 0;
   public roundTimeRemaining = 0;
   public scoreTeam0 = 0;
@@ -80,6 +81,7 @@ defineTypes(ActorState, {
 
 defineTypes(OrbitalLobbyState, {
   phase: "string",
+  matchComplete: "boolean",
   countdownRemaining: "number",
   roundTimeRemaining: "number",
   scoreTeam0: "number",

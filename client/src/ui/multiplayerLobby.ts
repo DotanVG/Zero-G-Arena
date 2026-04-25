@@ -820,6 +820,8 @@ export class MultiplayerLobby {
       this.setStatus(`Round live. ${formatTime(state.roundTimeRemaining)} remaining.`, "info");
     } else if (state.phase === "ROUND_END") {
       this.setStatus("Round complete. Rebuilding the arena for the next point...", "info");
+    } else if (state.matchComplete) {
+      this.setStatus("Match complete. Review the debrief, then ready up to launch the next match.", "info");
     } else {
       this.setStatus("Form up, balance the squads, and lock ready when both sides are full.", "info");
     }
@@ -1040,6 +1042,9 @@ function describeQueueState(state: MultiplayerRoomSnapshot, humans: number): str
   }
   if (state.phase === "ROUND_END") {
     return "Point resolved. The next round will auto-cycle while the room stays checked in.";
+  }
+  if (state.matchComplete) {
+    return "Match complete. Teams stay together in-room until everyone explicitly readies again.";
   }
   if (humans === 0) {
     return "Waiting for pilots to join the room.";

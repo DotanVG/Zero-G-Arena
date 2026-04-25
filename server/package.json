@@ -12,9 +12,17 @@
     "@colyseus/schema": "^4.0.20",
     "@colyseus/ws-transport": "^0.17.13",
     "@types/ws": "^8.18.1",
+    "cors": "^2.8.5",
     "express": "^5.2.1",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2"
   }
 }

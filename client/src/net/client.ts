@@ -1,4 +1,5 @@
 import { Client as ColyseusClient, type Room } from "@colyseus/sdk";
+import { getColyseusEndpoint } from "./endpoint";
 import { isMatchTeamSize, type MatchTeamSize } from "../../../shared/match";
 import {
   MULTIPLAYER_DEFAULT_TEAM_SIZE,
@@ -21,9 +22,10 @@ import {
   type SwitchTeamMessage,
 } from "../../../shared/multiplayer";
 
-// Use same origin so Vite proxies /matchmake HTTP to the game server.
+// Production reads VITE_COLYSEUS_ENDPOINT; dev defaults to same-origin so Vite
+// proxies /matchmake HTTP and /ws WebSocket to the local game server.
 // WebSocket endpoint is taken from the seat reservation's publicAddress field (set by the server).
-const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? `${location.protocol}//${location.host}`;
+const SERVER_URL = getColyseusEndpoint();
 
 type ColyseusRoomState = {
   phase: string;
@@ -38,7 +40,7 @@ type ColyseusRoomState = {
 };
 
 export class NetClient {
-  private client = new ColyseusClient(SERVER_URL);
+  private client: ColyseusClient | null = SERVER_URL ? new ColyseusClient(SERVER_URL) : null;
   private room: Room | null = null;
 
   public onStateChange: ((snapshot: MultiplayerRoomSnapshot) => void) | null = null;
@@ -50,6 +52,12 @@ export class NetClient {
 
   public async connect(options: MultiplayerJoinOptions): Promise<MultiplayerRoomSnapshot> {
     await this.disconnect(false);
+
+    if (!this.client) {
+      throw new Error(
+        "Online multiplayer endpoint not configured (VITE_COLYSEUS_ENDPOINT missing).",
+      );
+    }
 
     const room = await this.client.joinOrCreate(MULTIPLAYER_ROOM_NAME, {
       name: options.name,

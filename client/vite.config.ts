@@ -4,11 +4,11 @@ export default defineConfig({
   server: {
     proxy: {
       "/matchmake": {
-        target: "http://localhost:3001",
+        target: "http://localhost:2567",
         changeOrigin: true,
       },
       "/ws": {
-        target: "ws://localhost:3001",
+        target: "ws://localhost:2567",
         ws: true,
         changeOrigin: true,
       },

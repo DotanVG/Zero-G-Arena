@@ -66,7 +66,11 @@ export class PlayerDamageGlow {
   private time = 0;
 
   public constructor(team: 0 | 1) {
-    this.color.set(team === 0 ? "#ff4fd8" : "#59d9ff");
+    this.setTeam(team);
+  }
+
+  public setTeam(team: 0 | 1): void {
+    this.color.set(team === 0 ? "#59d9ff" : "#ff4fd8");
   }
 
   public attachTo(root: THREE.Group): void {

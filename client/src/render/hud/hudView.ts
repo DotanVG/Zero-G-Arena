@@ -361,6 +361,25 @@ const HUD_CSS = `
     text-transform: uppercase;
     text-shadow: 0 0 34px rgba(255, 255, 255, 0.28);
   }
+  .ob-round-end__line {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.32em;
+  }
+  .ob-round-end__team--cyan {
+    color: oklch(0.82 0.15 210);
+    text-shadow: 0 0 34px oklch(0.82 0.15 210 / 0.5);
+  }
+  .ob-round-end__team--magenta {
+    color: oklch(0.72 0.25 330);
+    text-shadow: 0 0 34px oklch(0.72 0.25 330 / 0.5);
+  }
+  .ob-round-end__text,
+  .ob-round-end__score {
+    color: #e8ecf4;
+  }
 
   .ob-scoreboard-overlay {
     display: none;

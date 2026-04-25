@@ -662,7 +662,9 @@ export class MultiplayerLobby {
   private leaveButton: HTMLButtonElement;
   private teamSizeSelect: HTMLSelectElement;
   private team0Title: HTMLDivElement;
+  private team0Relation: HTMLSpanElement;
   private team1Title: HTMLDivElement;
+  private team1Relation: HTMLSpanElement;
   private team0Count: HTMLDivElement;
   private team1Count: HTMLDivElement;
   private team0Roster: HTMLDivElement;
@@ -699,7 +701,9 @@ export class MultiplayerLobby {
     this.leaveButton = this.query("#mp-leave");
     this.teamSizeSelect = this.query("#mp-team-size");
     this.team0Title = this.query("#mp-team0-title");
+    this.team0Relation = this.query("#mp-team0-relation");
     this.team1Title = this.query("#mp-team1-title");
+    this.team1Relation = this.query("#mp-team1-relation");
     this.team0Count = this.query("#mp-team0-count");
     this.team1Count = this.query("#mp-team1-count");
     this.team0Roster = this.query("#mp-team0-roster");
@@ -740,7 +744,9 @@ export class MultiplayerLobby {
     this.queueCard.innerHTML = renderSummaryCard("queue", "Assembling", "Waiting for the queue state.");
     this.teamCard.innerHTML = renderSummaryCard("team", "Seat", "Finding your squad slot.");
     this.team0Title.textContent = "Cyan squad";
+    this.team0Relation.textContent = "Friendly";
     this.team1Title.textContent = "Magenta squad";
+    this.team1Relation.textContent = "Hostile";
     this.team0Count.textContent = "Loading";
     this.team1Count.textContent = "Loading";
     this.team0Roster.innerHTML = `<div class="ob-mp-empty">Joining room...</div>`;
@@ -830,11 +836,13 @@ export class MultiplayerLobby {
     const team1Members = state.members.filter((member) => member.team === 1);
 
     this.team0Title.textContent = "Cyan squad";
+    this.team0Relation.textContent = getTeamRelationLabel(state.selfTeam, 0);
     this.team1Title.textContent = "Magenta squad";
+    this.team1Relation.textContent = getTeamRelationLabel(state.selfTeam, 1);
     this.team0Count.textContent = `${team0Members.length}/${state.teamSize} queued`;
     this.team1Count.textContent = `${team1Members.length}/${state.teamSize} queued`;
-    this.team0Roster.innerHTML = renderRoster(team0Members, state.sessionId, CYAN);
-    this.team1Roster.innerHTML = renderRoster(team1Members, state.sessionId, MAGENTA);
+    this.team0Roster.innerHTML = renderRoster(team0Members, state.sessionId, 0);
+    this.team1Roster.innerHTML = renderRoster(team1Members, state.sessionId, 1);
   }
 
   private getSelf(state: MultiplayerRoomSnapshot) {
@@ -893,7 +901,7 @@ function buildMarkup(): string {
           <div class="ob-mp-brief-panel ob-mp-brief-panel--cyan">
             <div class="ob-mp-panel-head">
               <h3 class="ob-mp-panel-title">Team Cyan <span class="ob-mp-panel-idx">// 01</span></h3>
-              <span>Friendly</span>
+              <span id="mp-team0-relation">Friendly</span>
             </div>
             <div class="ob-mp-brief-team-head">
               <span id="mp-team0-title" class="ob-mp-brief-team-name" style="color:${CYAN}">Cyan</span>
@@ -957,7 +965,7 @@ function buildMarkup(): string {
           <div class="ob-mp-brief-panel ob-mp-brief-panel--magenta">
             <div class="ob-mp-panel-head">
               <h3 class="ob-mp-panel-title">Team Magenta <span class="ob-mp-panel-idx" style="color:oklch(0.72 0.25 330)">// 02</span></h3>
-              <span>Hostile</span>
+              <span id="mp-team1-relation">Hostile</span>
             </div>
             <div class="ob-mp-brief-team-head">
               <span id="mp-team1-title" class="ob-mp-brief-team-name" style="color:${MAGENTA}">Magenta</span>
@@ -990,22 +998,21 @@ function renderSummaryCard(label: string, value: string, copy: string): string {
 function renderRoster(
   members: MultiplayerRoomSnapshot["members"],
   sessionId: string,
-  accent: string,
+  team: 0 | 1,
 ): string {
   if (members.length === 0) {
     return `<div class="ob-mp-empty">Open lane</div>`;
   }
 
-  const isMagentaTeam = accent === MAGENTA;
   return members.map((member, i) => {
     const isSelf = member.id === sessionId;
     const selfCls = isSelf
-      ? (isMagentaTeam ? "ob-mp-brief-row--self-magenta" : "ob-mp-brief-row--self-cyan")
+      ? (team === 1 ? "ob-mp-brief-row--self-magenta" : "ob-mp-brief-row--self-cyan")
       : "";
     const pendingCls = !member.ready ? "ob-mp-brief-row--pending" : "";
     const dotCls = !member.ready
       ? "ob-mp-brief-ready-dot--pending"
-      : isMagentaTeam ? "ob-mp-brief-ready-dot--magenta" : "";
+      : team === 1 ? "ob-mp-brief-ready-dot--magenta" : "";
     const slot = String(i + 1).padStart(2, "0");
     const nameLabel = escapeHtml(member.name)
       + (member.isBot ? `<small style="opacity:.4;font-size:8px;letter-spacing:1px"> [bot]</small>` : "");
@@ -1018,6 +1025,10 @@ function renderRoster(
       </div>
     `;
   }).join("");
+}
+
+export function getTeamRelationLabel(selfTeam: 0 | 1, targetTeam: 0 | 1): "Friendly" | "Hostile" {
+  return selfTeam === targetTeam ? "Friendly" : "Hostile";
 }
 
 function describePhase(state: MultiplayerRoomSnapshot): string {

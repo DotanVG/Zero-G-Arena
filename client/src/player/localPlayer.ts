@@ -40,6 +40,7 @@ import {
 } from './playerGrabPose';
 import { PlayerDamageGlow } from './playerDamageGlow';
 import { loadAlienRenderClone } from './alienRenderAsset';
+import { applyTeamAccent } from './teamAccent';
 import {
   applyFloatArmTilt,
   applyArmRecoil,
@@ -92,9 +93,12 @@ export class LocalPlayer {
   private breachEntryCarryTimer = 0;
 
   private mesh: THREE.Group;
+  private bodyRoot: THREE.Group | null = null;
+  private helmetRoot: THREE.Group | null = null;
   private leftHandGripLocal = DEFAULT_LEFT_HAND_GRIP_LOCAL.clone();
   private grabHandGripLocal: THREE.Vector3 | null = null;
   private grabPoseLocked = false;
+  private worldModelVisible = false;
 
   private animation = new PlayerAnimationController();
   private damageGlow = new PlayerDamageGlow(this.team);
@@ -118,6 +122,9 @@ export class LocalPlayer {
         const gripLocal = measureLeftHandGripOffset(body);
         if (gripLocal) this.leftHandGripLocal.copy(gripLocal);
 
+        this.bodyRoot = body;
+        this.helmetRoot = helmet;
+
         this.animation.registerRig(body, bodyAnimations);
         this.damageGlow.attachTo(body);
         this.gun.attachTo(body);
@@ -125,6 +132,8 @@ export class LocalPlayer {
 
         this.animation.registerRig(helmet, helmetAnimations);
         this.mesh.add(helmet);
+        this.applyTeamVisuals();
+        this.updateWorldModelVisibility();
       })
       .catch((err: unknown) => {
         console.error('[LocalPlayer] failed to load alien render assets', err);
@@ -187,6 +196,7 @@ export class LocalPlayer {
     }
     this.mesh.position.copy(this.phys.pos);
     this.mesh.quaternion.copy(visualQuat);
+    this.updateWorldModelVisibility();
   }
 
   private updateFrozen(arena: Arena, dt: number): void {
@@ -617,6 +627,17 @@ export class LocalPlayer {
     return this.mesh;
   }
 
+  public setTeam(team: 0 | 1): void {
+    this.team = team;
+    this.damageGlow.setTeam(team);
+    this.applyTeamVisuals();
+  }
+
+  public setWorldModelVisible(visible: boolean): void {
+    this.worldModelVisible = visible;
+    this.updateWorldModelVisibility();
+  }
+
   public setThirdPersonGunVisible(visible: boolean): void {
     this.gun.setVisible(visible);
   }
@@ -719,5 +740,18 @@ export class LocalPlayer {
 
   public getFrozenTimer(): number {
     return 0;
+  }
+
+  private applyTeamVisuals(): void {
+    if (this.bodyRoot) {
+      applyTeamAccent(this.bodyRoot, this.team, 'player');
+    }
+    if (this.helmetRoot) {
+      applyTeamAccent(this.helmetRoot, this.team, 'player');
+    }
+  }
+
+  private updateWorldModelVisibility(): void {
+    this.mesh.visible = this.worldModelVisible && this.phase !== 'RESPAWNING';
   }
 }

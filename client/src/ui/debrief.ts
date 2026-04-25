@@ -22,6 +22,11 @@ export interface DebriefData {
 
 const CSS = `
   .ob-debrief-root {
+    --ob-debrief-accent: oklch(0.82 0.15 210);
+    --ob-debrief-accent-border: oklch(0.82 0.15 210 / 0.28);
+    --ob-debrief-accent-glow: oklch(0.82 0.15 210 / 0.2);
+    --ob-debrief-accent-surface: rgba(24, 52, 82, 0.3);
+    --ob-debrief-accent-text: oklch(0.9 0.1 210);
     position: fixed; inset: 0; z-index: 450;
     display: flex; align-items: center; justify-content: center; padding: 18px;
     background:
@@ -38,6 +43,20 @@ const CSS = `
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
+  }
+  .ob-debrief-root.ob-debrief-theme--cyan {
+    --ob-debrief-accent: oklch(0.82 0.15 210);
+    --ob-debrief-accent-border: oklch(0.82 0.15 210 / 0.28);
+    --ob-debrief-accent-glow: oklch(0.82 0.15 210 / 0.2);
+    --ob-debrief-accent-surface: rgba(24, 52, 82, 0.3);
+    --ob-debrief-accent-text: oklch(0.9 0.1 210);
+  }
+  .ob-debrief-root.ob-debrief-theme--magenta {
+    --ob-debrief-accent: oklch(0.72 0.25 330);
+    --ob-debrief-accent-border: oklch(0.72 0.25 330 / 0.28);
+    --ob-debrief-accent-glow: oklch(0.72 0.25 330 / 0.24);
+    --ob-debrief-accent-surface: rgba(76, 22, 70, 0.3);
+    --ob-debrief-accent-text: oklch(0.84 0.13 330);
   }
 
   .ob-debrief-wrap {
@@ -66,11 +85,20 @@ const CSS = `
   .ob-debrief-team-score .ob-ds-num {
     font-size: 96px; font-weight: 300; line-height: 0.9;
   }
-  .ob-debrief-team-score.ob-win  .ob-ds-num { color: oklch(0.82 0.15 210); text-shadow: 0 0 40px oklch(0.82 0.15 210 / 0.2); }
+  .ob-debrief-team-score--cyan.ob-win .ob-ds-num {
+    color: oklch(0.82 0.15 210);
+    text-shadow: 0 0 40px oklch(0.82 0.15 210 / 0.2);
+  }
+  .ob-debrief-team-score--magenta.ob-win .ob-ds-num {
+    color: oklch(0.72 0.25 330);
+    text-shadow: 0 0 40px oklch(0.72 0.25 330 / 0.24);
+  }
   .ob-debrief-team-score.ob-loss .ob-ds-num { color: #57637a; }
 
   .ob-debrief-verdict {
     font-size: 38px; letter-spacing: 0.1em; text-align: center; white-space: nowrap;
+    color: var(--ob-debrief-accent-text);
+    text-shadow: 0 0 20px var(--ob-debrief-accent-glow);
   }
   .ob-debrief-verdict .ob-dv-sub {
     display: block;
@@ -103,7 +131,7 @@ const CSS = `
   .ob-debrief-panel-head h3 {
     margin: 0; font-weight: 400; color: #9aa5b8; font-size: 10px; letter-spacing: 4px;
   }
-  .ob-debrief-panel-head h3 .ob-dph-idx { color: oklch(0.82 0.15 210); }
+  .ob-debrief-panel-head h3 .ob-dph-idx { color: var(--ob-debrief-accent); }
 
   /* ── Stats table ── */
   .ob-stats-table {
@@ -145,7 +173,7 @@ const CSS = `
     display: grid; gap: 3px;
     transition: border-color 0.22s, background 0.22s;
   }
-  .ob-award:hover { border-color: oklch(0.82 0.15 210); background: rgba(24, 52, 82, 0.3); }
+  .ob-award:hover { border-color: var(--ob-debrief-accent); background: var(--ob-debrief-accent-surface); }
   .ob-award-key {
     font-family: "JetBrains Mono", monospace; font-size: 9px; letter-spacing: 3px;
     color: #57637a; text-transform: uppercase;
@@ -153,7 +181,7 @@ const CSS = `
   .ob-award-val { font-size: 20px; letter-spacing: 0.04em; color: #e8ecf4; }
   .ob-award-note {
     font-family: "JetBrains Mono", monospace; font-size: 9px; letter-spacing: 2px;
-    color: oklch(0.82 0.15 210); margin-top: 2px;
+    color: var(--ob-debrief-accent); margin-top: 2px;
   }
 
   /* ── Action buttons ── */
@@ -169,8 +197,8 @@ const CSS = `
     display: flex; align-items: center; justify-content: center; gap: 10px;
   }
   .ob-debrief-btn:hover { border-color: rgba(210,220,240,0.3); background: rgba(20,30,50,0.7); transform: translateY(-1px); }
-  .ob-debrief-btn--primary { border-color: oklch(0.82 0.15 210 / 0.28); }
-  .ob-debrief-btn--primary:hover { border-color: oklch(0.82 0.15 210); color: oklch(0.9 0.1 210); }
+  .ob-debrief-btn--primary { border-color: var(--ob-debrief-accent-border); }
+  .ob-debrief-btn--primary:hover { border-color: var(--ob-debrief-accent); color: var(--ob-debrief-accent-text); }
 
   /* ── Tablet: collapse grid to 1-col ── */
   @media (max-width: 900px) {
@@ -278,6 +306,26 @@ function escapeHtml(s: string): string {
   );
 }
 
+export function getDebriefThemeTeam(playerTeam: 0 | 1): 0 | 1 {
+  return playerTeam;
+}
+
+export function getDebriefScoreStateClass(team: 0 | 1, winningTeam: 0 | 1 | null): "ob-win" | "ob-loss" {
+  return winningTeam === team ? "ob-win" : "ob-loss";
+}
+
+export function sortDebriefPlayers(players: DebriefPlayer[], playerTeam: 0 | 1): DebriefPlayer[] {
+  return [...players].sort((a, b) => {
+    const aOwnTeam = a.team === playerTeam ? 0 : 1;
+    const bOwnTeam = b.team === playerTeam ? 0 : 1;
+    if (aOwnTeam !== bOwnTeam) return aOwnTeam - bOwnTeam;
+    if (a.team !== b.team) return a.team - b.team;
+    if (a.isSelf !== b.isSelf) return a.isSelf ? -1 : 1;
+    if (a.breaches !== b.breaches) return b.breaches - a.breaches;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export class DebriefScreen {
   private readonly root: HTMLDivElement;
   public onMainMenu: (() => void) | null = null;
@@ -297,6 +345,8 @@ export class DebriefScreen {
 
   public show(data: DebriefData): void {
     this.root.innerHTML = this.buildHtml(data);
+    this.root.classList.toggle("ob-debrief-theme--cyan", getDebriefThemeTeam(data.playerTeam) === 0);
+    this.root.classList.toggle("ob-debrief-theme--magenta", getDebriefThemeTeam(data.playerTeam) === 1);
     this.root.classList.add("ob-debrief-visible");
 
     const mainMenuButton = this.root.querySelector<HTMLButtonElement>("#debrief-main-menu");
@@ -330,16 +380,13 @@ export class DebriefScreen {
     const mainMenuLabel = data.secondaryActionLabel ?? "Main Menu";
     const primaryActionLabel = data.primaryActionLabel ?? "Play Again";
 
-    const cyan0 = winningTeam === 0 ? "ob-win" : "ob-loss";
-    const cyan1 = winningTeam === 1 ? "ob-win" : "ob-loss";
+    const team0StateClass = getDebriefScoreStateClass(0, winningTeam);
+    const team1StateClass = getDebriefScoreStateClass(1, winningTeam);
     const verdictText = winningTeam === playerTeam ? "VICTORY"
       : winningTeam === null ? "DRAW"
       : "DEFEAT";
 
-    const sortedPlayers = [...players].sort((a, b) => {
-      if (a.team !== b.team) return a.team - b.team;
-      return b.breaches - a.breaches;
-    });
+    const sortedPlayers = sortDebriefPlayers(players, playerTeam);
 
     const tableRows = sortedPlayers.map((p, i) => {
       const teamCls = p.team === 0 ? "ob-t-cyan" : "ob-t-magenta";
@@ -358,7 +405,7 @@ export class DebriefScreen {
     return `
       <div class="ob-debrief-wrap">
         <div class="ob-debrief-head">
-          <div class="ob-debrief-team-score ${cyan0}">
+          <div class="ob-debrief-team-score ob-debrief-team-score--cyan ${team0StateClass}">
             <div class="ob-ds-name">Team Cyan</div>
             <div class="ob-ds-num">${score.team0}</div>
           </div>
@@ -366,7 +413,7 @@ export class DebriefScreen {
             ${verdictText}
             <span class="ob-dv-sub">${escapeHtml(matchLabel)}</span>
           </div>
-          <div class="ob-debrief-team-score ${cyan1}">
+          <div class="ob-debrief-team-score ob-debrief-team-score--magenta ${team1StateClass}">
             <div class="ob-ds-name">Team Magenta</div>
             <div class="ob-ds-num">${score.team1}</div>
           </div>

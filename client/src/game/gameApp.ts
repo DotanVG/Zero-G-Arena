@@ -12,7 +12,7 @@ import type { ProjectileHitEvent } from "../match/localMatch";
 import { isTouchDevice } from "../platform";
 import { LocalPlayer } from "../player";
 import { GunViewModel } from "../render/gun";
-import { HUD } from "../render/hud";
+import { buildRoundEndHtml, HUD } from "../render/hud";
 import { FirstTimeTutorial } from "../render/hud/tutorial";
 import { SceneManager } from "../render/scene";
 import { KillFeed } from "../ui/kill-feed";
@@ -132,7 +132,7 @@ export class App {
           this.killFeed.addScore(event.scorerName, event.scorerTeam);
           break;
         case "roundWin":
-          this.onRoundWin(event.winningTeam);
+          this.onRoundWin(event.winningTeam, event.reason);
           break;
         case "roundTie":
           this.onRoundTie();
@@ -240,7 +240,7 @@ export class App {
       this.onlineBreachReported = false;
 
       if (event.outcome === "tie") {
-        this.hud.showRoundEnd("TIE");
+        this.hud.showRoundEnd(buildRoundEndHtml("tie"));
         return;
       }
 
@@ -252,9 +252,11 @@ export class App {
         this.onlineMatchConcluding = true;
         this.pendingOnlineDebrief = this.buildOnlineDebrief(event.matchWinner, event.finalScore);
         this.sessionMenu.close();
-        const label = event.matchWinner === 0 ? "CYAN" : "MAGENTA";
         this.hud.showRoundEnd(
-          `${label} WINS THE MATCH  ${event.finalScore.team0} - ${event.finalScore.team1}`,
+          buildRoundEndHtml({
+            team: event.matchWinner,
+            matchScore: event.finalScore,
+          }),
         );
         this.input.exitPointerLock();
         this.input.setUiBlocked(true);
@@ -276,7 +278,17 @@ export class App {
         return;
       }
 
-      this.hud.showRoundEnd(event.winningTeam === 0 ? "CYAN WINS" : "MAGENTA WINS");
+      if (event.winningTeam !== null) {
+        this.hud.showRoundEnd(
+          event.reason === "fullFreeze"
+            ? buildRoundEndHtml({
+              team: event.winningTeam,
+              kind: "freeze",
+              enemyTeam: (1 - event.winningTeam) as 0 | 1,
+            })
+            : buildRoundEndHtml({ team: event.winningTeam }),
+        );
+      }
     };
 
     this.net.onShotEvent = (event) => {
@@ -641,7 +653,7 @@ export class App {
     this.arena.loadLayout(layout);
     this.projectiles.clear();
 
-    this.player.team = snapshot.selfTeam;
+    this.player.setTeam(snapshot.selfTeam);
     const selfActor = snapshot.actors.find((actor) => actor.id === snapshot.sessionId);
     this.player.kills = selfActor?.kills ?? 0;
     this.player.deaths = selfActor?.deaths ?? 0;
@@ -850,17 +862,21 @@ export class App {
     }
   }
 
-  private onRoundWin(team: 0 | 1): void {
+  private onRoundWin(team: 0 | 1, reason: "breach" | "fullFreeze"): void {
     if (!this.round.isPlaying()) return;
     this.projectiles.clear();
-    this.hud.showRoundEnd(team === 0 ? "CYAN WINS" : "MAGENTA WINS");
+    this.hud.showRoundEnd(
+      reason === "fullFreeze"
+        ? buildRoundEndHtml({ team, kind: "freeze", enemyTeam: (1 - team) as 0 | 1 })
+        : buildRoundEndHtml({ team }),
+    );
     this.round.endRound();
   }
 
   private onRoundTie(): void {
     if (!this.round.isPlaying()) return;
     this.projectiles.clear();
-    this.hud.showRoundEnd("TIE");
+    this.hud.showRoundEnd(buildRoundEndHtml("tie"));
     this.round.endRound();
   }
 
@@ -1098,7 +1114,7 @@ export class App {
     this.input.setUiBlocked(false);
     this.sessionMenu.setLauncherVisible(true);
 
-    this.player.team = 0;
+    this.player.setTeam(0);
     this.portalParams = {
       ...this.portalParams,
       color: this.portalParams.color ?? "cyan",
@@ -1201,6 +1217,7 @@ export class App {
     this.sessionMenu.setLauncherVisible(false);
     this.gun.setVisible(false);
     this.gun.setFrozenTint(null);
+    this.player.setWorldModelVisible(false);
     this.player.setThirdPersonGunVisible(false);
     this.player.setThirdPersonGunFrozenTint(null);
 
@@ -1423,6 +1440,7 @@ export class App {
     const phase = this.round.getPhase();
     const playerAlive = this.player.phase !== "RESPAWNING";
     const roundActive = this.appMode === "online" ? this.onlineGameActive : phase !== "LOBBY";
+    this.player.setWorldModelVisible(playerAlive && (this.thirdPerson || isSelfie));
 
     this.player.setThirdPersonGunVisible(
       roundActive && playerAlive && (this.thirdPerson || isSelfie),

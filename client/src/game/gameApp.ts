@@ -16,8 +16,10 @@ import { buildRoundEndHtml, HUD } from "../render/hud";
 import { FirstTimeTutorial } from "../render/hud/tutorial";
 import { SceneManager } from "../render/scene";
 import { KillFeed } from "../ui/kill-feed";
+import { initGlobalCursor, type GlobalCursor } from "../ui/globalCursor";
 import { MainMenu } from "../ui/menu";
 import { MobileControls } from "../ui/mobileControls";
+import { WelcomeScreen } from "../ui/welcome";
 import { SessionMenu, type SessionSettings } from "../ui/sessionMenu";
 import { SoundEngine } from "../audio/SoundEngine";
 import { cameraYawFacingBreachOpening } from "./cameraYawFromBreach";
@@ -68,6 +70,7 @@ export class App {
 
   private arena: Arena;
   private cam: CameraController;
+  private cursor!: GlobalCursor;
   private floatArmTuneOverlay = new FloatArmTuneOverlay();
   private gun: GunViewModel;
   private gunTuneOverlay = new GunTuneOverlay();
@@ -77,6 +80,7 @@ export class App {
   private lastTime = 0;
   private match: LocalMatch;
   private menu: MainMenu;
+  private welcome!: WelcomeScreen;
   private debrief = new DebriefScreen();
   private multiplayer = new MultiplayerLobby();
   private onlineMatch: OnlineMatch;
@@ -104,6 +108,8 @@ export class App {
     this.player = new LocalPlayer(this.sceneMgr.getScene());
     this.hud = new HUD();
     this.menu = new MainMenu();
+    this.cursor = initGlobalCursor();
+    this.welcome = new WelcomeScreen(this.cursor);
     this.projectiles = new ProjectileSystem(this.sceneMgr.getScene());
     this.match = new LocalMatch(this.sceneMgr.getScene());
     this.onlineMatch = new OnlineMatch(this.sceneMgr.getScene());
@@ -363,22 +369,35 @@ export class App {
     };
 
     if (this.portalArrivalPending) {
+      this.cursor.hide();
       this.startSoloMatch({
         name: this.portalParams.username?.trim() || "Portal Pilot",
         teamSize: 1,
         noBots: true,
       });
     } else {
-      this.menu.show();
+      this.welcome.onBreach = () => { this.menu.show(); };
+      this.welcome.show();
     }
 
     const unlockAudio = (): void => {
       void this.sound.unlock().then(() => { this.sound.startMusic(); });
       document.removeEventListener('pointerdown', unlockAudio);
       document.removeEventListener('keydown', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
     };
     document.addEventListener('pointerdown', unlockAudio);
     document.addEventListener('keydown', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio, { passive: true });
+
+    // Resume music when user returns to tab/app (AudioContext suspends on hide)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) this.sound.tryResumeMusic();
+    });
+    // iOS back/forward cache restore — context is suspended on bfcache restore
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) this.sound.tryResumeMusic();
+    });
 
     requestAnimationFrame((timestamp) => this.loop(timestamp));
   }
@@ -643,6 +662,11 @@ export class App {
     this.onlineBreachReported = false;
     this.playerUpdateTimer = 0;
     this.tutorial.beginRun();
+    this.cursor.hide();
+
+    if (!this.mobile) {
+      this.input.lockPointer(this.sceneMgr.getRenderer().domElement);
+    }
 
     this.multiplayer.hide();
     this.hud.setVisible(true);
@@ -943,6 +967,7 @@ export class App {
     this.closeSessionMenu();
     this.debrief.hide();
     this.appMode = "menu";
+    this.cursor.show();
     this.matchOver = false;
     this.projectiles.clear();
     clearVibeJamPortals();
@@ -1100,6 +1125,7 @@ export class App {
     this.lastSoloSelection = selection;
     this.debrief.hide();
     this.appMode = "solo";
+    this.cursor.hide();
     this.matchOver = false;
     this.onlineBreachReported = false;
     this.helpVisible = false;
@@ -1197,6 +1223,7 @@ export class App {
     this.debrief.hide();
     this.appMode = "menu";
     this.onlineGameActive = false;
+    this.cursor.show();
     this.onlineBreachReported = false;
     this.onlineMatchConcluding = false;
     this.pendingOnlineDebrief = null;
@@ -1251,6 +1278,7 @@ export class App {
     this.hud.setVisible(false);
     this.hud.hideRoundEnd();
     this.killFeed.setVisible(false);
+    this.cursor.show();
     this.debrief.show(data);
   }
 

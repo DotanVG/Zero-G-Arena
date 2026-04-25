@@ -528,7 +528,6 @@ export class SessionMenu {
 
   private persistSettings(): void {
     localStorage.setItem(STORAGE_KEYS.mouseSensitivity, String(this.settings.mouseSensitivity));
-    localStorage.setItem(STORAGE_KEYS.soundtrackEnabled, this.settings.soundtrackEnabled ? "1" : "0");
     localStorage.setItem(STORAGE_KEYS.musicVolume, String(this.settings.musicVolume));
     localStorage.setItem(STORAGE_KEYS.sfxVolume, String(this.settings.sfxVolume));
   }
@@ -551,13 +550,15 @@ export class SessionMenu {
 
 function loadSettings(): SessionSettings {
   const sensitivity = Number(localStorage.getItem(STORAGE_KEYS.mouseSensitivity) ?? DEFAULT_SETTINGS.mouseSensitivity);
-  const soundtrackEnabled = localStorage.getItem(STORAGE_KEYS.soundtrackEnabled);
+  // Always default music to ON — never persist "off" state across sessions.
+  // Stale "0" values from prior sessions would silently gate all audio on mobile.
+  localStorage.removeItem(STORAGE_KEYS.soundtrackEnabled);
   const musicVolume = Number(localStorage.getItem(STORAGE_KEYS.musicVolume) ?? DEFAULT_SETTINGS.musicVolume);
   const sfxVolume = Number(localStorage.getItem(STORAGE_KEYS.sfxVolume) ?? DEFAULT_SETTINGS.sfxVolume);
 
   return {
     mouseSensitivity: Number.isFinite(sensitivity) ? clamp(sensitivity, 0.0005, 0.004) : DEFAULT_SETTINGS.mouseSensitivity,
-    soundtrackEnabled: soundtrackEnabled === null ? DEFAULT_SETTINGS.soundtrackEnabled : soundtrackEnabled === "1",
+    soundtrackEnabled: true,
     musicVolume: Number.isFinite(musicVolume) ? clamp(musicVolume, 0, 100) : DEFAULT_SETTINGS.musicVolume,
     sfxVolume: Number.isFinite(sfxVolume) ? clamp(sfxVolume, 0, 100) : DEFAULT_SETTINGS.sfxVolume,
   };

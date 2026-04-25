@@ -90,30 +90,6 @@ const CSS = `
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
 
-  /* ── CURSOR ── */
-  .ob-cursor {
-    position: fixed; top: 0; left: 0; pointer-events: none; z-index: 50;
-    width: 28px; height: 28px;
-    transform: translate(-50%, -50%);
-    mix-blend-mode: screen;
-    color: var(--ob-cyan);
-  }
-  .ob-cursor::before {
-    content: ""; position: absolute; inset: 0; border-radius: 50%;
-    border: 1px solid var(--ob-cyan);
-    transition: transform .2s ease, border-color .2s ease;
-  }
-  .ob-cursor::after {
-    content: ""; position: absolute;
-    width: 3px; height: 3px; left: 50%; top: 50%;
-    transform: translate(-50%,-50%);
-    background: var(--ob-cyan); box-shadow: 0 0 8px var(--ob-cyan);
-    border-radius: 50%;
-  }
-  .ob-cursor.ob-hot::before { transform: scale(1.7); border-color: var(--ob-magenta); }
-  .ob-cursor.ob-hot::after  { background: var(--ob-magenta); box-shadow: 0 0 10px var(--ob-magenta); }
-  .ob-cursor svg { position: absolute; inset: -6px; width: 40px; height: 40px; opacity: .6; }
-
   /* ── CORNER BRACKETS ── */
   .ob-hud-corner {
     position: fixed; width: 44px; height: 44px;
@@ -445,7 +421,7 @@ const CSS = `
     .ob-settings-row { margin-top: 0; }
     .ob-callsign-box { min-width: 0; width: 90vw; }
     .menu-root       { cursor: auto; overflow-y: auto; align-items: start; }
-    .ob-cursor       { display: none; }
+
     .ob-topbar  { padding-left: 16px; padding-right: 16px; padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
     .ob-bottombar { padding-left: 16px; padding-right: 16px;
                     padding-bottom: max(14px, env(safe-area-inset-bottom, 14px)); }
@@ -612,17 +588,6 @@ export function createMenuView(savedName: string, matchSize: MatchTeamSize): Men
         </div>
       </div>
       <div class="ob-bg-grain"></div>
-
-      <!-- CURSOR -->
-      ${!touch ? `
-      <div class="ob-cursor" id="ob-cursor">
-        <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width=".8">
-          <line x1="20" y1="0"  x2="20" y2="10"/>
-          <line x1="20" y1="30" x2="20" y2="40"/>
-          <line x1="0"  y1="20" x2="10" y2="20"/>
-          <line x1="30" y1="20" x2="40" y2="20"/>
-        </svg>
-      </div>` : ""}
 
       <!-- CORNER CHROME -->
       <span class="ob-hud-corner ob-tl"></span>
@@ -893,25 +858,16 @@ function initMenuFx(container: HTMLElement): void {
     }
   }
 
-  // ── 5. Cursor + orbit tilt + letter parallax loop ──
-  const cursorEl = root.querySelector<HTMLElement>("#ob-cursor");
-  const orbitEl  = root.querySelector<HTMLElement>("#ob-orbit-tilt");
+  // ── 5. Orbit tilt + letter parallax loop ──
+  const orbitEl = root.querySelector<HTMLElement>("#ob-orbit-tilt");
   let mx = window.innerWidth / 2, my = window.innerHeight / 2;
-  let cx = mx, cy = my;
   let rafMain = 0;
 
   const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; };
-  const onDown = () => cursorEl?.classList.add("ob-hot");
-  const onUp   = () => cursorEl?.classList.remove("ob-hot");
   window.addEventListener("mousemove", onMove);
-  window.addEventListener("mousedown", onDown);
-  window.addEventListener("mouseup",   onUp);
 
   const mainLoop = () => {
     if (!root.isConnected) return;
-    cx += (mx - cx) * 0.25;
-    cy += (my - cy) * 0.25;
-    if (cursorEl) cursorEl.style.transform = `translate(${cx}px,${cy}px) translate(-50%,-50%)`;
     if (orbitEl && !touch) {
       const nx = (mx / window.innerWidth  - 0.5) * 2;
       const ny = (my / window.innerHeight - 0.5) * 2;
@@ -971,8 +927,6 @@ function initMenuFx(container: HTMLElement): void {
     if (!root.isConnected) {
       cancelAnimationFrame(rafMain);
       window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("mouseup",   onUp);
       mo.disconnect();
     }
   });
@@ -986,14 +940,6 @@ function initMenuFx(container: HTMLElement): void {
       el.style.setProperty("--my", ((e.clientY - r.top)  / r.height * 100) + "%");
     });
   });
-  root.querySelectorAll<HTMLElement>(".ob-btn-primary, .ob-match-card").forEach((el) => {
-    el.addEventListener("mouseenter", () => cursorEl?.classList.add("ob-hot"));
-    el.addEventListener("mouseleave", () => cursorEl?.classList.remove("ob-hot"));
-  });
-  const tutorialBtn = root.querySelector<HTMLElement>(".ob-tutorial-btn");
-  tutorialBtn?.addEventListener("mouseenter", () => cursorEl?.classList.add("ob-hot"));
-  tutorialBtn?.addEventListener("mouseleave", () => cursorEl?.classList.remove("ob-hot"));
-
   // ── 7. UTC clock ──
   const clockEl = root.querySelector<HTMLElement>("#ob-clock");
   if (clockEl) {

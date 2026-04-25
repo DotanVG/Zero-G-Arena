@@ -57,9 +57,17 @@ export class SoundEngine {
     this.applyMusicGain();
     this.applySfxGain();
 
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
+    // Always resume — on iOS 13+ context starts 'running' but skipping resume
+    // leaves audio gated behind the user-gesture policy for async src.start() calls.
+    await ctx.resume();
+
+    // Play a 1-frame silent buffer synchronously to satisfy iOS's "first playback
+    // must originate from a user gesture" requirement before async buffer loads.
+    const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const primer = ctx.createBufferSource();
+    primer.buffer = silent;
+    primer.connect(ctx.destination);
+    primer.start();
 
     await this.loadBuffers();
   }
@@ -82,6 +90,13 @@ export class SoundEngine {
     if (!this.musicSource) return;
     try { this.musicSource.stop(); } catch { /* already stopped */ }
     this.musicSource = null;
+  }
+
+  public tryResumeMusic(): void {
+    if (!this.ctx || !this.musicEnabled) return;
+    void this.ctx.resume().then(() => {
+      if (!this.musicSource) this.startMusic();
+    });
   }
 
   public setMusicVolume(pct0to100: number): void {

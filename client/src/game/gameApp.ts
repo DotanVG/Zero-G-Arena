@@ -390,15 +390,6 @@ export class App {
     document.addEventListener('keydown', unlockAudio);
     document.addEventListener('touchstart', unlockAudio, { passive: true });
 
-    // Resume music when user returns to the tab/app (tab switch, home button, etc.)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') this.sound.tryResumeMusic();
-    });
-    // iOS back/forward cache restore
-    window.addEventListener('pageshow', (e) => {
-      if (e.persisted) this.sound.tryResumeMusic();
-    });
-
     requestAnimationFrame((timestamp) => this.loop(timestamp));
   }
 

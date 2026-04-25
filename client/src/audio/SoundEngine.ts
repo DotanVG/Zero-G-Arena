@@ -72,14 +72,6 @@ export class SoundEngine {
     await this.loadBuffers();
   }
 
-  public tryResumeMusic(): void {
-    if (!this.ctx) return;
-    if (this.ctx.state === 'suspended') {
-      void this.ctx.resume().catch(() => {});
-    }
-    this.startMusic();
-  }
-
   public startMusic(): void {
     if (!this.ctx || !this.musicGain || !this.buffers.music) return;
     if (this.musicSource) return; // already playing

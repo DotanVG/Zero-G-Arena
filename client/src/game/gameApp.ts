@@ -493,7 +493,10 @@ export class App {
       this.sendOnlinePlayerUpdate();
     }
 
-    const isSelfie = false;
+    if (FEATURE_FLAGS.thirdPersonLookBehind && this.input.consumeThirdPersonToggle()) {
+      this.thirdPerson = !this.thirdPerson;
+    }
+    const isSelfie = FEATURE_FLAGS.thirdPersonLookBehind && this.input.isSelfieHeld();
     this.cam.apply(this.player.getPosition(), this.thirdPerson, isSelfie);
     this.updateGunVisibility(isSelfie);
     this.updateOnlineHud(dt);
@@ -508,7 +511,9 @@ export class App {
     if (!this.input.canControlGame() || !inZeroG) return;
     if (!this.player.canFire() || !this.input.consumeFire()) return;
 
-    const shot = buildShotFromCamera(this.player, this.cam, this.gun, false);
+    const useThirdPersonMuzzle = this.thirdPerson
+      || (FEATURE_FLAGS.thirdPersonLookBehind && this.input.isSelfieHeld());
+    const shot = buildShotFromCamera(this.player, this.cam, this.gun, useThirdPersonMuzzle);
     if (!shot) return;
 
     const localActorId = this.getOnlineLocalActorId();
@@ -756,6 +761,7 @@ export class App {
       const max = this.player.maxLaunchPower();
       const pct = max > 0 ? this.player.launchPower / max : 0;
       this.mobileControls.setPowerLevel(pct, showPower);
+      this.mobileControls.setViewMode(this.thirdPerson);
     }
 
     const rosters = this.onlineMatch.getHudRosters(

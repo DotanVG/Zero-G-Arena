@@ -353,11 +353,11 @@ export class DebriefScreen {
 
     const mainMenuButton = this.root.querySelector<HTMLButtonElement>("#debrief-main-menu");
     if (mainMenuButton && data.secondaryActionLabel) {
-      mainMenuButton.textContent = `${data.secondaryActionLabel} ->`;
+      mainMenuButton.textContent = data.secondaryActionLabel;
     }
     const primaryActionButton = this.root.querySelector<HTMLButtonElement>("#debrief-play-again");
     if (primaryActionButton && data.primaryActionLabel) {
-      primaryActionButton.textContent = `${data.primaryActionLabel} ->`;
+      primaryActionButton.textContent = data.primaryActionLabel;
     }
 
     mainMenuButton?.addEventListener("click", () => { this.hide(); this.onMainMenu?.(); });
@@ -406,10 +406,10 @@ export class DebriefScreen {
 
     const awards = this.buildAwards(players);
     const secondaryAction = showSecondaryAction
-      ? `<button class="ob-debrief-btn" id="debrief-main-menu">${escapeHtml(mainMenuLabel)} -></button>`
+      ? `<button class="ob-debrief-btn" id="debrief-main-menu">${escapeHtml(mainMenuLabel)}</button>`
       : "";
     const primaryAction = showPrimaryAction
-      ? `<button class="ob-debrief-btn ob-debrief-btn--primary" id="debrief-play-again">${escapeHtml(primaryActionLabel)} -></button>`
+      ? `<button class="ob-debrief-btn ob-debrief-btn--primary" id="debrief-play-again">${escapeHtml(primaryActionLabel)}</button>`
       : "";
 
     return `

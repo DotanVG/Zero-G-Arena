@@ -3,6 +3,7 @@ export interface SessionSettings {
   musicVolume: number;
   soundtrackEnabled: boolean;
   sfxVolume: number;
+  defaultCameraMode: "first" | "third";
 }
 
 export interface SessionMenuConfig {
@@ -19,6 +20,7 @@ const STORAGE_KEYS = {
   musicVolume: "orbital_music_volume",
   soundtrackEnabled: "orbital_soundtrack_enabled",
   sfxVolume: "orbital_sfx_volume",
+  defaultCameraMode: "orbital_default_camera_mode",
 } as const;
 
 const DEFAULT_SETTINGS: SessionSettings = {
@@ -26,6 +28,7 @@ const DEFAULT_SETTINGS: SessionSettings = {
   soundtrackEnabled: true,
   musicVolume: 60,
   sfxVolume: 50,
+  defaultCameraMode: "first",
 };
 
 const CSS = `
@@ -276,6 +279,26 @@ const CSS = `
     accent-color: #7ffcff;
   }
 
+  .ob-session-select {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 0;
+    border: 1px solid rgba(210, 220, 240, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    color: #effcff;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    accent-color: #7ffcff;
+    cursor: pointer;
+  }
+
+  .ob-session-select:focus {
+    outline: 1px solid rgba(127, 252, 255, 0.4);
+  }
+
   @media (max-width: 640px) {
     .ob-session-actions {
       grid-template-columns: 1fr;
@@ -361,6 +384,7 @@ export class SessionMenu {
   private readonly musicValue: HTMLSpanElement;
   private readonly sfxInput: HTMLInputElement;
   private readonly sfxValue: HTMLSpanElement;
+  private readonly cameraSelect: HTMLSelectElement;
   private settings = loadSettings();
 
   public onLauncherRequest: (() => void) | null = null;
@@ -433,6 +457,16 @@ export class SessionMenu {
               </div>
               <input id="session-menu-sfx" class="ob-session-range" type="range" min="0" max="100" step="1" />
             </div>
+
+            <div class="ob-session-field">
+              <div class="ob-session-field-head">
+                <span class="ob-session-field-label">Default Camera</span>
+              </div>
+              <select id="session-menu-camera" class="ob-session-select">
+                <option value="first">First Person</option>
+                <option value="third">Third Person</option>
+              </select>
+            </div>
           </section>
         </div>
       </div>
@@ -451,6 +485,7 @@ export class SessionMenu {
     this.musicValue = this.query("#session-menu-music-value");
     this.sfxInput = this.query("#session-menu-sfx");
     this.sfxValue = this.query("#session-menu-sfx-value");
+    this.cameraSelect = this.query("#session-menu-camera");
 
     this.resumeButton.addEventListener("click", () => this.onResume?.());
     this.mainMenuButton.addEventListener("click", () => this.onMainMenu?.());
@@ -475,6 +510,12 @@ export class SessionMenu {
     });
     this.sfxInput.addEventListener("input", () => {
       this.settings.sfxVolume = Number(this.sfxInput.value);
+      this.persistSettings();
+      this.renderSettings();
+      this.onSettingsChange?.(this.getSettings());
+    });
+    this.cameraSelect.addEventListener("change", () => {
+      this.settings.defaultCameraMode = this.cameraSelect.value === "third" ? "third" : "first";
       this.persistSettings();
       this.renderSettings();
       this.onSettingsChange?.(this.getSettings());
@@ -530,6 +571,7 @@ export class SessionMenu {
     localStorage.setItem(STORAGE_KEYS.mouseSensitivity, String(this.settings.mouseSensitivity));
     localStorage.setItem(STORAGE_KEYS.musicVolume, String(this.settings.musicVolume));
     localStorage.setItem(STORAGE_KEYS.sfxVolume, String(this.settings.sfxVolume));
+    localStorage.setItem(STORAGE_KEYS.defaultCameraMode, this.settings.defaultCameraMode);
   }
 
   private renderSettings(): void {
@@ -541,6 +583,7 @@ export class SessionMenu {
     this.musicValue.textContent = `${Math.round(this.settings.musicVolume)}%`;
     this.sfxInput.value = String(this.settings.sfxVolume);
     this.sfxValue.textContent = `${Math.round(this.settings.sfxVolume)}%`;
+    this.cameraSelect.value = this.settings.defaultCameraMode;
   }
 
   private query<T extends HTMLElement>(selector: string): T {
@@ -555,12 +598,14 @@ function loadSettings(): SessionSettings {
   localStorage.removeItem(STORAGE_KEYS.soundtrackEnabled);
   const musicVolume = Number(localStorage.getItem(STORAGE_KEYS.musicVolume) ?? DEFAULT_SETTINGS.musicVolume);
   const sfxVolume = Number(localStorage.getItem(STORAGE_KEYS.sfxVolume) ?? DEFAULT_SETTINGS.sfxVolume);
+  const savedCameraMode = localStorage.getItem(STORAGE_KEYS.defaultCameraMode);
 
   return {
     mouseSensitivity: Number.isFinite(sensitivity) ? clamp(sensitivity, 0.0005, 0.004) : DEFAULT_SETTINGS.mouseSensitivity,
     soundtrackEnabled: true,
     musicVolume: Number.isFinite(musicVolume) ? clamp(musicVolume, 0, 100) : DEFAULT_SETTINGS.musicVolume,
     sfxVolume: Number.isFinite(sfxVolume) ? clamp(sfxVolume, 0, 100) : DEFAULT_SETTINGS.sfxVolume,
+    defaultCameraMode: savedCameraMode === "third" ? "third" : "first",
   };
 }
 

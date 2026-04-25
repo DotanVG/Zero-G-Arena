@@ -359,6 +359,9 @@ const HUD_CSS = `
     letter-spacing: 0.08em;
     text-align: center;
     text-transform: uppercase;
+    white-space: pre-line;
+    line-height: 1.12;
+    max-width: min(900px, 92vw);
     text-shadow: 0 0 34px rgba(255, 255, 255, 0.28);
   }
 
@@ -640,6 +643,12 @@ const HUD_CSS = `
       bottom: 12px;
       width: auto;
       padding: 10px;
+    }
+
+    .ob-round-end {
+      padding: 18px;
+      font-size: clamp(26px, 8vw, 40px);
+      letter-spacing: 0.06em;
     }
 
     .ob-scoreboard-overlay {

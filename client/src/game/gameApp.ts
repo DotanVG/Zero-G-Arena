@@ -251,10 +251,8 @@ export class App {
       if (event.matchWinner !== null && event.finalScore) {
         this.onlineMatchConcluding = true;
         this.pendingOnlineDebrief = this.buildOnlineDebrief(event.matchWinner, event.finalScore);
-        const label = event.matchWinner === 0 ? "CYAN" : "MAGENTA";
-        this.hud.showRoundEnd(
-          `${label} WINS THE MATCH  ${event.finalScore.team0} - ${event.finalScore.team1}`,
-        );
+        this.sessionMenu.close();
+        this.hud.showRoundEnd(this.buildOnlineMatchEndMessage(event.matchWinner, event.finalScore));
         this.input.exitPointerLock();
         this.input.setUiBlocked(true);
         this.mobileControls?.hide();
@@ -936,7 +934,7 @@ export class App {
   }
 
   private openSessionMenu(): void {
-    if (this.sessionMenu.isOpen() || this.debrief.isVisible()) return;
+    if (this.sessionMenu.isOpen() || this.debrief.isVisible() || this.onlineMatchConcluding) return;
 
     const inMenu = this.appMode === "menu";
     const inLiveMatch = this.appMode === "solo" || this.onlineGameActive;
@@ -985,6 +983,12 @@ export class App {
     this.input.setUiBlocked(false);
 
     if (!this.mobile) return;
+
+    if (this.onlineMatchConcluding || this.debrief.isVisible()) {
+      this.input.setMobileControlsActive(false);
+      this.mobileControls?.hide();
+      return;
+    }
 
     if (this.appMode === "solo" || this.onlineGameActive) {
       this.input.setMobileControlsActive(true);
@@ -1265,6 +1269,17 @@ export class App {
       playerTeam,
       matchLabel: `${sizeLabelMap[teamSize] ?? `${teamSize}v${teamSize}`} Online · ${finalScore.team0} – ${finalScore.team1}`,
     };
+  }
+
+  private buildOnlineMatchEndMessage(
+    winningTeam: 0 | 1,
+    finalScore: { team0: number; team1: number },
+  ): string {
+    const label = winningTeam === 0 ? "CYAN" : "MAGENTA";
+    const compactScore = `[${finalScore.team0}-${finalScore.team1}]`;
+    return this.mobile
+      ? `${label} WINS\n${compactScore}`
+      : `${label} WINS THE MATCH\n${compactScore}`;
   }
 
   private returnToOnlineLobbyFromDebrief(): void {

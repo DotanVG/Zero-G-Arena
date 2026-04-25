@@ -52,6 +52,7 @@ const ONLINE_MATCH_DEBRIEF_DELAY_MS = 4000;
 export class App {
   private appMode: "menu" | "solo" | "online" = "menu";
   private onlineGameActive = false;
+  private onlineRoundActive = false;
   private onlineSessionToken = 0;
   private isUserExitingOnline = false;
   private matchOver = false;
@@ -187,6 +188,7 @@ export class App {
       this.previousOnlinePhase = snapshot.phase;
 
       if (this.onlineMatchConcluding) {
+        this.onlineRoundActive = false;
         if (this.onlineGameActive) {
           this.arena.setPortalDoorsOpen(snapshot.phase === "PLAYING");
           this.onlineMatch.applySnapshot(snapshot.actors, snapshot.sessionId);
@@ -216,6 +218,7 @@ export class App {
       }
 
       if (this.onlineGameActive) {
+        this.onlineRoundActive = snapshot.phase === "PLAYING";
         this.arena.setPortalDoorsOpen(snapshot.phase === "PLAYING");
         this.onlineMatch.applySnapshot(snapshot.actors, snapshot.sessionId);
       }
@@ -242,6 +245,7 @@ export class App {
       if (this.isUserExitingOnline || this.appMode !== "online") return;
       if (!this.onlineGameActive) return;
 
+      this.onlineRoundActive = false;
       this.projectiles.clear();
       this.onlineBreachReported = false;
 
@@ -538,7 +542,7 @@ export class App {
       || this.player.phase === "GRABBING"
       || this.player.phase === "AIMING";
 
-    if (!this.onlineGameActive) return;
+    if (!this.onlineGameActive || !this.onlineRoundActive) return;
     if (!this.input.canControlGame() || !inZeroG) return;
     if (!this.player.canFire() || !this.input.consumeFire()) return;
 
@@ -659,6 +663,7 @@ export class App {
     }
 
     this.onlineGameActive = true;
+    this.onlineRoundActive = snapshot.phase === "PLAYING";
     this.onlineBreachReported = false;
     this.playerUpdateTimer = 0;
     this.tutorial.beginRun();
@@ -713,6 +718,7 @@ export class App {
     this.sound.stopCountdown();
     this.closeSessionMenu();
     this.onlineGameActive = false;
+    this.onlineRoundActive = false;
     this.onlineBreachReported = false;
 
     this.onlineMatch.dispose();
@@ -1170,6 +1176,7 @@ export class App {
     this.appMode = "online";
     this.onlinePlayerName = selection.name;
     this.onlineGameActive = false;
+    this.onlineRoundActive = false;
     this.onlineBreachReported = false;
     this.onlineMatchConcluding = false;
     this.pendingOnlineDebrief = null;
@@ -1223,6 +1230,7 @@ export class App {
     this.debrief.hide();
     this.appMode = "menu";
     this.onlineGameActive = false;
+    this.onlineRoundActive = false;
     this.cursor.show();
     this.onlineBreachReported = false;
     this.onlineMatchConcluding = false;
@@ -1330,6 +1338,7 @@ export class App {
   private returnToOnlineLobbyFromDebrief(): void {
     this.onlineMatchConcluding = false;
     this.onlineGameActive = false;
+    this.onlineRoundActive = false;
     this.input.setUiBlocked(false);
     this.sessionMenu.setLauncherVisible(true);
     this.hud.hideRoundEnd();

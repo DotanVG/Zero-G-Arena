@@ -1166,13 +1166,17 @@ export class App {
     this.player.setThirdPersonGunVisible(false);
     this.player.setThirdPersonGunFrozenTint(null);
 
-    try {
-      await this.net.disconnect();
-    } catch (error) {
-      console.warn("Multiplayer disconnect raised an error.", error);
-    }
-
+    // Show the main menu BEFORE awaiting disconnect. Colyseus's
+    // room.leave(true) waits for server ack and can hang for several
+    // seconds after a fully-joined session, leaving a black canvas
+    // if menu.show() ran after the await.
     this.menu.show();
+
+    const disconnectPromise = this.net.disconnect().catch((error) => {
+      console.warn("Multiplayer disconnect raised an error.", error);
+    });
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, 1500));
+    await Promise.race([disconnectPromise, timeout]);
   }
 
   // ── Weapon fire (solo) ──────────────────────────────────────────────────────

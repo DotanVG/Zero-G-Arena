@@ -212,3 +212,7 @@ export function buildBotName(botIndex: number, team: LobbyTeam): string {
   const prefix = team === 0 ? "CY" : "MG";
   return `${prefix}-BOT-${String(botIndex + 1).padStart(2, "0")}`;
 }
+
+export function canJoinMultiplayerRoom(phase: MultiplayerRoomPhase): boolean {
+  return phase === "LOBBY";
+}

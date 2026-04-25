@@ -1,6 +1,7 @@
 import { Room, type Client } from "@colyseus/core";
 import {
   buildBotName,
+  canJoinMultiplayerRoom,
   canStartLobbyRound,
   getPreferredJoinTeam,
   isMatchTeamSizeValue,
@@ -13,6 +14,7 @@ import {
   type FreezeEventMessage,
   type HitReportMessage,
   type LobbyTeam,
+  type MultiplayerRoomPhase,
   type PlayerUpdateMessage,
   type RoundResultEventMessage,
   type SetReadyMessage,
@@ -90,6 +92,14 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     });
 
     void this.unlock();
+  }
+
+  public onAuth(): true {
+    if (!canJoinMultiplayerRoom(this.state.phase as MultiplayerRoomPhase)) {
+      throw new Error("A match is already in progress. Wait for the lobby before joining.");
+    }
+
+    return true;
   }
 
   public onJoin(client: RoomClient, options?: { name?: string }): void {

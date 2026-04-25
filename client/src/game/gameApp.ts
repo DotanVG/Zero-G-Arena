@@ -186,17 +186,14 @@ export class App {
         snapshot.phase === "COUNTDOWN"
         && prev !== "COUNTDOWN"
         && prev !== "PLAYING";
-      const joinedLiveRound = !this.onlineGameActive && snapshot.phase === "PLAYING";
 
-      if (shouldBeginOnlineRound || joinedLiveRound) {
+      if (shouldBeginOnlineRound) {
         this.beginOnlineRound(snapshot);
-        if (shouldBeginOnlineRound) {
-          this.sound.playCountdown();
-        }
+        this.sound.playCountdown();
       }
 
       if (snapshot.phase === "LOBBY") {
-        if (this.onlineGameActive) {
+        if (this.onlineGameActive || this.pendingOnlineDebrief) {
           this.endOnlineGame();
         }
         return;
@@ -651,16 +648,15 @@ export class App {
     this.mobileControls?.hide();
     this.input.setMobileControlsActive(false);
 
-    const snap = this.latestOnlineSnapshot;
-    if (snap) {
-      this.multiplayer.render(snap);
-    }
-
     if (this.pendingOnlineDebrief) {
       const debrief = this.pendingOnlineDebrief;
       this.pendingOnlineDebrief = null;
       this.showMatchDebrief(debrief);
     } else {
+      const snap = this.latestOnlineSnapshot;
+      if (snap) {
+        this.multiplayer.render(snap);
+      }
       this.hud.setVisible(false);
       this.hud.hideRoundEnd();
     }
@@ -1119,7 +1115,7 @@ export class App {
       }
       this.latestOnlineSnapshot = snapshot;
       this.previousOnlinePhase = snapshot.phase;
-      if (snapshot.phase === "COUNTDOWN" || snapshot.phase === "PLAYING") {
+      if (snapshot.phase === "COUNTDOWN") {
         this.beginOnlineRound(snapshot);
       } else {
         this.multiplayer.render(snapshot);
@@ -1129,8 +1125,11 @@ export class App {
       if (myToken !== this.onlineSessionToken || this.isUserExitingOnline || this.appMode !== "online") {
         return;
       }
+      const message = error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : "Could not reach the Colyseus server. Check that the server is running.";
       this.multiplayer.setStatus(
-        "Could not reach the Colyseus server. Check that the server is running.",
+        message,
         "error",
       );
       await this.requestLeaveOnline("join_failed");

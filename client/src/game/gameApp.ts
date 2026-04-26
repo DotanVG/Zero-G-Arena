@@ -497,6 +497,10 @@ export class App {
     const { dx, dy } = this.input.consumeMouseDelta();
     this.cam.applyMouseDelta(dx, dy, this.input.mouseSensitivity);
 
+    if (this.player.isAttachedToBar()) {
+      this.input.consumeGrab();
+    }
+
     this.input.updateFireCooldown(dt);
     this.player.update(this.input, this.cam, this.arena, dt);
     this.arena.update(dt);

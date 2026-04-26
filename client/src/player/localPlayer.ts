@@ -55,6 +55,7 @@ import {
   type FloatArmTuningState,
   type FloatLimbTuningTarget,
 } from './playerAimPose';
+import { shouldPreserveLocalOnlineGrab } from './onlineGrabSync';
 import { ThirdPersonGun, type ThirdPersonGunTuningState } from './playerThirdPersonGun';
 
 const GRAB_ROTATION_SMOOTHING = 0.0008;
@@ -633,11 +634,19 @@ export class LocalPlayer {
     this.deaths = actor.deaths;
     this.launchPower = clamp(this.launchPower, 0, this.maxLaunchPower());
 
-    const nextPhase = this.damage.frozen
+    const authoritativePhase = this.damage.frozen
       ? 'FROZEN'
       : this.normalizeOnlinePhase(actor.phase);
+    const preserveLocalGrab = shouldPreserveLocalOnlineGrab({
+      authoritativePhase,
+      frozen: this.damage.frozen,
+      leftArmDisabled: this.damage.leftArm,
+      localHasGrab: this.grabbedBarPos !== null,
+      localPhase: this.phase,
+    });
+    const nextPhase = preserveLocalGrab ? this.phase : authoritativePhase;
 
-    if (nextPhase !== 'GRABBING' && nextPhase !== 'AIMING') {
+    if (!preserveLocalGrab && nextPhase !== 'GRABBING' && nextPhase !== 'AIMING') {
       this.grabbedBarPos = null;
       this.grabHandGripLocal = null;
       this.grabPoseLocked = false;
@@ -767,6 +776,11 @@ export class LocalPlayer {
 
   public getFrozenTimer(): number {
     return 0;
+  }
+
+  public isAttachedToBar(): boolean {
+    return this.grabbedBarPos !== null
+      && (this.phase === 'GRABBING' || this.phase === 'AIMING');
   }
 
   private normalizeOnlinePhase(phase: string): PlayerPhase {

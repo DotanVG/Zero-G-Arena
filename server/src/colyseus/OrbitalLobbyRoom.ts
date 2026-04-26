@@ -727,7 +727,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     let nearest: ActorState | null = null;
     let nearestDistSq = Infinity;
     for (const actor of this.state.actors.values()) {
-      if (actor.team === bot.team || actor.frozen) continue;
+      if (!isOnlineActorTargetableByBot(bot.team, actor, this.botGoalAxis, this.botGoalSigns)) continue;
       const dx = actor.posX - bot.posX;
       const dy = actor.posY - bot.posY;
       const dz = actor.posZ - bot.posZ;
@@ -744,6 +744,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     if (bot.rightArm || bot.frozen) return;
     const enemy = this.findNearestBotEnemy(bot);
     if (!enemy) return;
+    if (!isOnlineActorTargetableByBot(bot.team, enemy, this.botGoalAxis, this.botGoalSigns)) return;
     const dx = enemy.posX - bot.posX;
     const dy = enemy.posY - bot.posY;
     const dz = enemy.posZ - bot.posZ;
@@ -1095,4 +1096,54 @@ function botBounceArena(actor: ActorState, goalAxis: "x" | "z"): void {
       }
     }
   }
+}
+
+interface OnlineBotTargetCandidate {
+  team: 0 | 1;
+  frozen: boolean;
+  phase: string;
+  posX: number;
+  posY: number;
+  posZ: number;
+}
+
+export function isOnlineActorTargetableByBot(
+  botTeam: 0 | 1,
+  actor: OnlineBotTargetCandidate,
+  goalAxis: "x" | "z",
+  goalSigns: { team0: 1 | -1; team1: 1 | -1 },
+): boolean {
+  if (actor.team === botTeam || actor.frozen || actor.phase === "RESPAWNING") {
+    return false;
+  }
+
+  return getOnlineActorBreachTeam(actor, goalAxis, goalSigns) === null;
+}
+
+export function getOnlineActorBreachTeam(
+  actor: Pick<OnlineBotTargetCandidate, "posX" | "posY" | "posZ">,
+  goalAxis: "x" | "z",
+  goalSigns: { team0: 1 | -1; team1: 1 | -1 },
+): 0 | 1 | null {
+  return isPointInsideBreachRoom(actor, breachRoomCenter(goalAxis, goalSigns.team0), goalAxis)
+    ? 0
+    : isPointInsideBreachRoom(actor, breachRoomCenter(goalAxis, goalSigns.team1), goalAxis)
+      ? 1
+      : null;
+}
+
+function isPointInsideBreachRoom(
+  pos: Pick<OnlineBotTargetCandidate, "posX" | "posY" | "posZ">,
+  center: { x: number; y: number; z: number },
+  goalAxis: "x" | "z",
+): boolean {
+  if (Math.abs(pos.posY - center.y) >= BREACH_ROOM_H / 2) return false;
+
+  const depthPos = goalAxis === "x" ? pos.posX : pos.posZ;
+  const depthCenter = goalAxis === "x" ? center.x : center.z;
+  if (Math.abs(depthPos - depthCenter) >= BREACH_ROOM_D / 2) return false;
+
+  const perpPos = goalAxis === "x" ? pos.posZ : pos.posX;
+  const perpCenter = goalAxis === "x" ? center.z : center.x;
+  return Math.abs(perpPos - perpCenter) < BREACH_ROOM_W / 2;
 }

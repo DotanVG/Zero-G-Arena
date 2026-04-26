@@ -661,6 +661,7 @@ export class App {
       rightLeg: this.player.damage.rightLeg,
       kills: this.player.kills,
       deaths: this.player.deaths,
+      ping: this.net.getPing(),
     });
   }
 
@@ -827,6 +828,7 @@ export class App {
       this.player.deaths,
       this.player.damage.frozen,
       this.player.phase,
+      this.net.getPing(),
     );
 
     this.hud.update({

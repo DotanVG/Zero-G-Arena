@@ -68,6 +68,8 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
   private botGoalAxis: "x" | "z" = "x";
   private botGoalSigns: { team0: 1 | -1; team1: 1 | -1 } = { team0: 1, team1: -1 };
   private botFireTimers = new Map<string, number>();
+  private botBarPositions: Array<{ x: number; y: number; z: number }> = [];
+  private botWaypoints = new Map<string, { x: number; y: number; z: number; kind: "bar" | "breach"; ttl: number }>();
   private countdownPreparedRound = false;
   private roundResolved = false;
   private lastPlayerUpdate = new Map<string, number>();
@@ -267,6 +269,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     actor.velY = clampFinite(Number(message.velY), -VEL_CLAMP, VEL_CLAMP);
     actor.velZ = clampFinite(Number(message.velZ), -VEL_CLAMP, VEL_CLAMP);
     actor.yaw = clampFinite(Number(message.yaw), -Math.PI * 2, Math.PI * 2);
+    actor.ping = clampFinite(Number(message.ping), 0, 9999);
     const rawPhase = String(message.phase ?? "");
     const prevPhase = actor.phase;
     actor.phase = normalizeAuthoritativePhase(rawPhase, actor);
@@ -550,6 +553,8 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     const { goalAxis, goalSigns } = layout;
     this.botGoalAxis = goalAxis as "x" | "z";
     this.botGoalSigns = goalSigns;
+    this.botBarPositions = collectBotBarPositions(layout.obstacles);
+    this.botWaypoints.clear();
 
     // openSign = direction FROM breach room TOWARD arena (opposite of goalSign)
     const openSign0 = (-goalSigns.team0) as 1 | -1;
@@ -587,6 +592,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
       actor.rightLeg = false;
       actor.kills = 0;
       actor.deaths = 0;
+      actor.ping = 0;
       actor.yaw = this.botSpawnYaw[member.team];
 
       if (member.team === 0) {
@@ -618,6 +624,8 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     this.state.actors.clear();
     this.botAI.clear();
     this.botFireTimers.clear();
+    this.botBarPositions = [];
+    this.botWaypoints.clear();
   }
 
   private tickBots(dt: number): void {
@@ -635,9 +643,10 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
         if (!ai) continue;
         ai.launchTimer -= dt;
         if (ai.launchTimer <= 0) {
-          const dx = -actor.posX + (Math.random() - 0.5) * p.angleNoise * 6;
-          const dy = -actor.posY + (Math.random() - 0.5) * p.angleNoise * 3;
-          const dz = -actor.posZ + (Math.random() - 0.5) * p.angleNoise * 6;
+          const waypoint = this.chooseBotWaypoint(actor, p, "launch");
+          const dx = waypoint.x - actor.posX;
+          const dy = waypoint.y - actor.posY;
+          const dz = waypoint.z - actor.posZ;
           const len = Math.hypot(dx, dy, dz) || 1;
           actor.velX = (dx / len) * p.launchSpeed;
           actor.velY = (dy / len) * p.launchSpeed;
@@ -652,6 +661,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
       }
 
       if (actor.phase === "FLOATING") {
+        this.steerBotTowardWaypoint(actor, p, dt);
         botIntegrateZeroG(actor, dt);
         botBounceArena(actor, this.botGoalAxis);
 
@@ -679,22 +689,20 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
   private resolveOnlineBotCollisions(): void {
     if (this.state.phase !== "PLAYING") return;
 
-    const bodies: Array<CollisionBody & { id: string; isBot: boolean }> = [];
+    const bodies: Array<CollisionBody & { id: string }> = [];
     for (const actor of this.state.actors.values()) {
       if (actor.frozen) continue;
       bodies.push({
         id: actor.id,
-        isBot: actor.isBot,
         pos: { x: actor.posX, y: actor.posY, z: actor.posZ },
-        vel: actor.isBot ? { x: actor.velX, y: actor.velY, z: actor.velZ } : undefined,
+        vel: { x: actor.velX, y: actor.velY, z: actor.velZ },
         radius: ACTOR_COLLISION_RADIUS,
-        anchored: !actor.isBot,
+        anchored: actor.phase === "GRABBING" || actor.phase === "AIMING",
       });
     }
     if (bodies.length < 2) return;
     resolveActorCollisions(bodies);
     for (const body of bodies) {
-      if (!body.isBot) continue;
       const actor = this.state.actors.get(body.id);
       if (!actor) continue;
       actor.posX = body.pos.x;
@@ -706,6 +714,81 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
         actor.velZ = body.vel.z;
       }
     }
+  }
+
+  private steerBotTowardWaypoint(actor: ActorState, p: BotPersonality, dt: number): void {
+    let waypoint = this.botWaypoints.get(actor.id);
+    if (!waypoint || waypoint.ttl <= 0 || botReachedWaypoint(actor, waypoint)) {
+      waypoint = this.chooseBotWaypoint(
+        actor,
+        p,
+        waypoint?.kind === "bar" ? "advance" : "mixup",
+      );
+    } else {
+      waypoint.ttl -= dt;
+    }
+
+    const dx = waypoint.x - actor.posX;
+    const dy = waypoint.y - actor.posY;
+    const dz = waypoint.z - actor.posZ;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const desiredSpeed = Math.min(
+      MAX_LAUNCH_SPEED,
+      p.launchSpeed * (waypoint.kind === "bar" ? 0.86 : 0.94),
+    );
+    const desiredX = (dx / len) * desiredSpeed;
+    const desiredY = (dy / len) * desiredSpeed;
+    const desiredZ = (dz / len) * desiredSpeed;
+    const steer = Math.min(1, dt * (1.4 + p.tier * 0.18));
+    const drift = p.pathNoise * Math.min(1, dt * 4);
+
+    actor.velX += (desiredX - actor.velX) * steer + (Math.random() - 0.5) * drift;
+    actor.velY += (desiredY - actor.velY) * steer + (Math.random() - 0.5) * drift * 0.5;
+    actor.velZ += (desiredZ - actor.velZ) * steer + (Math.random() - 0.5) * drift;
+  }
+
+  private chooseBotWaypoint(
+    actor: ActorState,
+    p: BotPersonality,
+    mode: "launch" | "advance" | "mixup",
+  ): { x: number; y: number; z: number; kind: "bar" | "breach"; ttl: number } {
+    const enemyTeam = (actor.team === 0 ? 1 : 0) as 0 | 1;
+    const goal = breachRoomCenter(
+      this.botGoalAxis,
+      enemyTeam === 0 ? this.botGoalSigns.team0 : this.botGoalSigns.team1,
+    );
+    const useBar = this.botBarPositions.length > 0
+      && (
+        mode === "launch"
+          ? Math.random() < 0.72
+          : mode === "mixup"
+            ? Math.random() < 0.48
+            : Math.random() < 0.22
+      );
+
+    if (useBar) {
+      const target = pickBotBarTarget(actor, goal, this.botBarPositions, this.botGoalAxis);
+      const waypoint = {
+        x: target.x,
+        y: target.y + (Math.random() - 0.5) * 1.4,
+        z: target.z,
+        kind: "bar" as const,
+        ttl: 1.5 + Math.random() * 1.8,
+      };
+      this.botWaypoints.set(actor.id, waypoint);
+      return waypoint;
+    }
+
+    const jitterScale = p.goalNoise;
+    const waypoint = {
+      x: goal.x + (this.botGoalAxis === "x" ? 0 : (Math.random() - 0.5) * jitterScale),
+      y: clampFinite(goal.y + (Math.random() - 0.5) * (jitterScale * 0.35), -ARENA_SIZE / 2, ARENA_SIZE / 2),
+      z: goal.z + (this.botGoalAxis === "z" ? 0 : (Math.random() - 0.5) * jitterScale),
+      kind: "breach" as const,
+      ttl: 2.2 + Math.random() * 2.2,
+    };
+    this.botWaypoints.set(actor.id, waypoint);
+    return waypoint;
   }
 
   private botIsInEnemyBreachRoom(bot: ActorState): boolean {
@@ -765,8 +848,8 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
       dirZ: nz / nLen,
     };
     this.broadcast("shot_event", shotEvent);
-    const rangeFactor = 1 - (dist / p.maxRange) * 0.5;
-    const hitChance = (0.35 + p.tier * 0.1) * rangeFactor;
+    const rangeFactor = Math.max(0.2, 1 - (dist / p.maxRange) * 0.8);
+    const hitChance = (0.16 + p.tier * 0.035) * rangeFactor;
     if (Math.random() > hitChance || enemy.frozen) return;
     if (enemy.isBot) {
       enemy.frozen = true;
@@ -1008,6 +1091,8 @@ interface BotPersonality {
   launchSpeed: number;
   fireDelay: number;
   angleNoise: number;
+  pathNoise: number;
+  goalNoise: number;
   maxRange: number;
 }
 
@@ -1017,7 +1102,9 @@ function botPersonality(idHash: number): BotPersonality {
     tier,
     launchSpeed: 6 + tier * 2,      // 6..14
     fireDelay: 3.0 - tier * 0.4,    // 3.0..1.4s
-    angleNoise: 0.45 - tier * 0.08, // 0.45..0.13
+    angleNoise: 0.72 - tier * 0.08, // 0.72..0.40
+    pathNoise: 0.22 + tier * 0.03,  // 0.22..0.34
+    goalNoise: 10 - tier * 0.9,     // 10..6.4
     maxRange: 15 + tier * 5,        // 15..35
   };
 }
@@ -1095,4 +1182,58 @@ function botBounceArena(actor: ActorState, goalAxis: "x" | "z"): void {
       }
     }
   }
+}
+
+function collectBotBarPositions(
+  obstacles: Array<{
+    pos: { x: number; y: number; z: number };
+    bars: Array<{ localPos: { x: number; y: number; z: number } }>;
+  }>,
+): Array<{ x: number; y: number; z: number }> {
+  const positions: Array<{ x: number; y: number; z: number }> = [];
+  for (const obstacle of obstacles) {
+    for (const bar of obstacle.bars) {
+      positions.push({
+        x: obstacle.pos.x + bar.localPos.x,
+        y: obstacle.pos.y + bar.localPos.y,
+        z: obstacle.pos.z + bar.localPos.z,
+      });
+    }
+  }
+  return positions;
+}
+
+function pickBotBarTarget(
+  actor: ActorState,
+  goal: { x: number; y: number; z: number },
+  bars: Array<{ x: number; y: number; z: number }>,
+  goalAxis: "x" | "z",
+): { x: number; y: number; z: number } {
+  let best = bars[Math.floor(Math.random() * bars.length)] ?? goal;
+  let bestScore = -Infinity;
+
+  for (const bar of bars) {
+    const toBar = Math.hypot(bar.x - actor.posX, bar.y - actor.posY, bar.z - actor.posZ);
+    const toGoal = Math.hypot(goal.x - bar.x, goal.y - bar.y, goal.z - bar.z);
+    const lateralAxis = goalAxis === "x" ? "z" : "x";
+    const lateralSpread = Math.abs(bar[lateralAxis] - goal[lateralAxis]);
+    const score = -toBar * 0.7 - toGoal * 0.35 + lateralSpread * 0.45 + Math.random() * 2.5;
+    if (score > bestScore) {
+      best = bar;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+function botReachedWaypoint(
+  actor: ActorState,
+  waypoint: { x: number; y: number; z: number; kind: "bar" | "breach" },
+): boolean {
+  const dx = waypoint.x - actor.posX;
+  const dy = waypoint.y - actor.posY;
+  const dz = waypoint.z - actor.posZ;
+  const radius = waypoint.kind === "bar" ? 2.5 : 3.8;
+  return dx * dx + dy * dy + dz * dz <= radius * radius;
 }

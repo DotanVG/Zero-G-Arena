@@ -43,6 +43,8 @@ type ColyseusRoomState = {
 export class NetClient {
   private client: ColyseusClient | null = SERVER_URL ? new ColyseusClient(SERVER_URL) : null;
   private room: Room | null = null;
+  private pingMs = 0;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
 
   public onStateChange: ((snapshot: MultiplayerRoomSnapshot) => void) | null = null;
   public onLobbyEvent: ((event: LobbyEventMessage) => void) | null = null;
@@ -65,6 +67,7 @@ export class NetClient {
     });
 
     this.room = room;
+    this.pingMs = 0;
     room.onStateChange((state) => {
       this.onStateChange?.(buildSnapshot(room, state as ColyseusRoomState));
     });
@@ -81,9 +84,12 @@ export class NetClient {
       this.onShotEvent?.(event);
     });
     room.onLeave(() => {
+      this.clearPingTimer();
       this.room = null;
+      this.pingMs = 0;
       this.onLeave?.();
     });
+    this.startPingLoop(room);
 
     return buildSnapshot(room, room.state as ColyseusRoomState);
   }
@@ -91,6 +97,8 @@ export class NetClient {
   public async disconnect(consented = true): Promise<void> {
     const room = this.room;
     this.room = null;
+    this.clearPingTimer();
+    this.pingMs = 0;
     if (room) {
       await room.leave(consented);
     }
@@ -98,6 +106,10 @@ export class NetClient {
 
   public getSessionId(): string | null {
     return this.room?.sessionId ?? null;
+  }
+
+  public getPing(): number {
+    return this.pingMs;
   }
 
   public setReady(ready: boolean): void {
@@ -134,6 +146,27 @@ export class NetClient {
 
   private send<T>(type: string, message: T): void {
     this.room?.send(type, message);
+  }
+
+  private startPingLoop(room: Room): void {
+    this.clearPingTimer();
+
+    const sample = (): void => {
+      if (this.room !== room) return;
+      room.ping((ms) => {
+        if (this.room !== room) return;
+        this.pingMs = Number.isFinite(ms) ? Math.max(0, ms) : 0;
+      });
+    };
+
+    sample();
+    this.pingTimer = setInterval(sample, 2000);
+  }
+
+  private clearPingTimer(): void {
+    if (!this.pingTimer) return;
+    clearInterval(this.pingTimer);
+    this.pingTimer = null;
   }
 }
 
@@ -243,6 +276,7 @@ function toActorSnapshot(value: Record<string, unknown>): OnlineActorSnapshot {
     rightLeg: Boolean(value.rightLeg),
     kills: Number(value.kills ?? 0),
     deaths: Number(value.deaths ?? 0),
+    ping: Number(value.ping ?? 0),
   };
 }
 

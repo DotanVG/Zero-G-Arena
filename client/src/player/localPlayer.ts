@@ -621,7 +621,20 @@ export class LocalPlayer {
 
   public applyAuthoritativeOnlineState(actor: Pick<
     OnlineActorSnapshot,
-    'deaths' | 'frozen' | 'kills' | 'leftArm' | 'leftLeg' | 'phase' | 'rightArm' | 'rightLeg'
+    | 'deaths'
+    | 'frozen'
+    | 'kills'
+    | 'leftArm'
+    | 'leftLeg'
+    | 'phase'
+    | 'posX'
+    | 'posY'
+    | 'posZ'
+    | 'rightArm'
+    | 'rightLeg'
+    | 'velX'
+    | 'velY'
+    | 'velZ'
   >): void {
     this.damage.frozen = actor.frozen;
     this.damage.leftArm = actor.leftArm;
@@ -651,6 +664,20 @@ export class LocalPlayer {
     }
 
     this.phase = nextPhase;
+
+    if (!preserveLocalGrab && nextPhase !== 'GRABBING' && nextPhase !== 'AIMING') {
+      const authoritativePos = new THREE.Vector3(actor.posX, actor.posY, actor.posZ);
+      const authoritativeVel = new THREE.Vector3(actor.velX, actor.velY, actor.velZ);
+      const deltaSq = this.phys.pos.distanceToSquared(authoritativePos);
+
+      if (deltaSq > 1.96 || nextPhase === 'RESPAWNING') {
+        this.phys.pos.copy(authoritativePos);
+        this.phys.vel.copy(authoritativeVel);
+      } else if (deltaSq > 0.0324) {
+        this.phys.pos.lerp(authoritativePos, 0.45);
+        this.phys.vel.lerp(authoritativeVel, 0.35);
+      }
+    }
   }
 
   public getPosition(): THREE.Vector3 {

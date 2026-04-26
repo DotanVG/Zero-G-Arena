@@ -27,16 +27,18 @@ import { findMatchWinner } from "../../../shared/match-flow";
 import { generateArenaLayout } from "../../../shared/arena-gen";
 import { isCallSignClean } from "../../../shared/profanity";
 import {
+  ACTOR_COLLISION_RADIUS,
   ARENA_SIZE,
   BREACH_ROOM_D,
   BREACH_ROOM_H,
+  BREACH_ROOM_W,
   MATCH_POINT_TARGET,
   MAX_LAUNCH_SPEED,
   MAX_SPEED,
   PLAYER_RADIUS,
 } from "../../../shared/constants";
 import type { PlayerPhase } from "../../../shared/schema";
-import { generateSpawnPositions } from "../../../shared/player-logic";
+import { generateSpawnPositions, resolveActorCollisions, type CollisionBody } from "../../../shared/player-logic";
 import { applyHitToOnlineActor, isHitZone, normalizeAuthoritativePhase } from "./actorDamage";
 import { ActorState, LobbyMemberState, OrbitalLobbyState } from "./state";
 
@@ -63,6 +65,9 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
   private botCounters: Record<LobbyTeam, number> = { 0: 0, 1: 0 };
   private botSpawnYaw: Record<LobbyTeam, number> = { 0: 0, 1: 0 };
   private botAI = new Map<string, { launchTimer: number }>();
+  private botGoalAxis: "x" | "z" = "x";
+  private botGoalSigns: { team0: 1 | -1; team1: 1 | -1 } = { team0: 1, team1: -1 };
+  private botFireTimers = new Map<string, number>();
   private countdownPreparedRound = false;
   private roundResolved = false;
   private lastPlayerUpdate = new Map<string, number>();
@@ -443,6 +448,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
 
     this.matchTick = setInterval(() => {
       this.tickBots(MATCH_TICK_MS / 1000);
+      this.resolveOnlineBotCollisions();
     }, MATCH_TICK_MS);
   }
 
@@ -542,6 +548,8 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
 
     const layout = generateArenaLayout(this.state.roundNumber);
     const { goalAxis, goalSigns } = layout;
+    this.botGoalAxis = goalAxis as "x" | "z";
+    this.botGoalSigns = goalSigns;
 
     // openSign = direction FROM breach room TOWARD arena (opposite of goalSign)
     const openSign0 = (-goalSigns.team0) as 1 | -1;
@@ -597,7 +605,9 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
 
       if (member.isBot) {
         const idHash = botIdHash(member.id);
+        const p = botPersonality(idHash);
         this.botAI.set(member.id, { launchTimer: 1.5 + (idHash % 30) * 0.1 });
+        this.botFireTimers.set(member.id, p.fireDelay * (0.5 + (idHash % 10) * 0.05));
       }
 
       this.state.actors.set(member.id, actor);
@@ -607,6 +617,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
   private clearActors(): void {
     this.state.actors.clear();
     this.botAI.clear();
+    this.botFireTimers.clear();
   }
 
   private tickBots(dt: number): void {
@@ -614,39 +625,23 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
 
     for (const actor of this.state.actors.values()) {
       if (!actor.isBot) continue;
+      if (actor.frozen) continue; // stay frozen until round end
 
-      if (actor.frozen) {
-        actor.frozenTimer = Math.max(0, actor.frozenTimer - dt);
-        if (actor.frozenTimer <= 0) {
-          actor.frozen = false;
-          actor.phase = "BREACH";
-          actor.leftArm = false;
-          actor.rightArm = false;
-          actor.leftLeg = false;
-          actor.rightLeg = false;
-          actor.velX = 0;
-          actor.velY = 0;
-          actor.velZ = 0;
-          actor.yaw = this.botSpawnYaw[actor.team];
-          const idHash = botIdHash(actor.id);
-          this.botAI.set(actor.id, { launchTimer: 1.5 + (idHash % 30) * 0.1 });
-        }
-        continue;
-      }
+      const idHash = botIdHash(actor.id);
+      const p = botPersonality(idHash);
 
       if (actor.phase === "BREACH") {
         const ai = this.botAI.get(actor.id);
         if (!ai) continue;
         ai.launchTimer -= dt;
         if (ai.launchTimer <= 0) {
-          const dx = -actor.posX;
-          const dy = -actor.posY;
-          const dz = -actor.posZ;
+          const dx = -actor.posX + (Math.random() - 0.5) * p.angleNoise * 6;
+          const dy = -actor.posY + (Math.random() - 0.5) * p.angleNoise * 3;
+          const dz = -actor.posZ + (Math.random() - 0.5) * p.angleNoise * 6;
           const len = Math.hypot(dx, dy, dz) || 1;
-          const speed = 10;
-          actor.velX = (dx / len) * speed;
-          actor.velY = (dy / len) * speed;
-          actor.velZ = (dz / len) * speed;
+          actor.velX = (dx / len) * p.launchSpeed;
+          actor.velY = (dy / len) * p.launchSpeed;
+          actor.velZ = (dz / len) * p.launchSpeed;
           actor.phase = "FLOATING";
           const horizLen = Math.hypot(dx, dz);
           if (horizLen > 0.01) {
@@ -658,13 +653,140 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
 
       if (actor.phase === "FLOATING") {
         botIntegrateZeroG(actor, dt);
-        botBounceArena(actor);
+        botBounceArena(actor, this.botGoalAxis);
+
         const horizSpeed = Math.hypot(actor.velX, actor.velZ);
         if (horizSpeed > 0.5) {
           actor.yaw = Math.atan2(-actor.velX, -actor.velZ);
         }
+
+        if (!this.roundResolved && this.botIsInEnemyBreachRoom(actor)) {
+          this.awardOnlineRoundPoint(actor.team, actor.name, "breach");
+        }
+
+        const fireTimer = this.botFireTimers.get(actor.id) ?? p.fireDelay;
+        const nextFireTimer = fireTimer - dt;
+        if (nextFireTimer <= 0) {
+          this.botTryFire(actor, p);
+          this.botFireTimers.set(actor.id, p.fireDelay * (0.8 + Math.random() * 0.4));
+        } else {
+          this.botFireTimers.set(actor.id, nextFireTimer);
+        }
       }
     }
+  }
+
+  private resolveOnlineBotCollisions(): void {
+    if (this.state.phase !== "PLAYING") return;
+
+    const bodies: Array<CollisionBody & { id: string; isBot: boolean }> = [];
+    for (const actor of this.state.actors.values()) {
+      if (actor.frozen) continue;
+      bodies.push({
+        id: actor.id,
+        isBot: actor.isBot,
+        pos: { x: actor.posX, y: actor.posY, z: actor.posZ },
+        vel: actor.isBot ? { x: actor.velX, y: actor.velY, z: actor.velZ } : undefined,
+        radius: ACTOR_COLLISION_RADIUS,
+        anchored: !actor.isBot,
+      });
+    }
+    if (bodies.length < 2) return;
+    resolveActorCollisions(bodies);
+    for (const body of bodies) {
+      if (!body.isBot) continue;
+      const actor = this.state.actors.get(body.id);
+      if (!actor) continue;
+      actor.posX = body.pos.x;
+      actor.posY = body.pos.y;
+      actor.posZ = body.pos.z;
+      if (body.vel) {
+        actor.velX = body.vel.x;
+        actor.velY = body.vel.y;
+        actor.velZ = body.vel.z;
+      }
+    }
+  }
+
+  private botIsInEnemyBreachRoom(bot: ActorState): boolean {
+    const enemyTeam = (bot.team === 0 ? 1 : 0) as 0 | 1;
+    const enemySign = enemyTeam === 0 ? this.botGoalSigns.team0 : this.botGoalSigns.team1;
+    const goalAxis = this.botGoalAxis;
+    const perpAxis: "x" | "z" = goalAxis === "x" ? "z" : "x";
+    const botOnGoal = goalAxis === "x" ? bot.posX : bot.posZ;
+    const botOnPerp = perpAxis === "x" ? bot.posX : bot.posZ;
+    const arenaEdge = enemySign * (ARENA_SIZE / 2);
+    const roomBack = enemySign * (ARENA_SIZE / 2 + BREACH_ROOM_D);
+    const inDepth = enemySign > 0
+      ? botOnGoal > arenaEdge && botOnGoal < roomBack
+      : botOnGoal < arenaEdge && botOnGoal > roomBack;
+    return inDepth && Math.abs(bot.posY) < BREACH_ROOM_H / 2 && Math.abs(botOnPerp) < BREACH_ROOM_W / 2;
+  }
+
+  private findNearestBotEnemy(bot: ActorState): ActorState | null {
+    let nearest: ActorState | null = null;
+    let nearestDistSq = Infinity;
+    for (const actor of this.state.actors.values()) {
+      if (actor.team === bot.team || actor.frozen) continue;
+      const dx = actor.posX - bot.posX;
+      const dy = actor.posY - bot.posY;
+      const dz = actor.posZ - bot.posZ;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearest = actor;
+      }
+    }
+    return nearest;
+  }
+
+  private botTryFire(bot: ActorState, p: BotPersonality): void {
+    if (bot.rightArm || bot.frozen) return;
+    const enemy = this.findNearestBotEnemy(bot);
+    if (!enemy) return;
+    const dx = enemy.posX - bot.posX;
+    const dy = enemy.posY - bot.posY;
+    const dz = enemy.posZ - bot.posZ;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq > p.maxRange * p.maxRange) return;
+    const dist = Math.sqrt(distSq);
+    const nx = dx / dist + (Math.random() - 0.5) * p.angleNoise;
+    const ny = dy / dist + (Math.random() - 0.5) * p.angleNoise;
+    const nz = dz / dist + (Math.random() - 0.5) * p.angleNoise;
+    const nLen = Math.hypot(nx, ny, nz) || 1;
+    const shotEvent: ShotEventMessage = {
+      ownerId: bot.id,
+      team: bot.team,
+      originX: bot.posX,
+      originY: bot.posY,
+      originZ: bot.posZ,
+      dirX: nx / nLen,
+      dirY: ny / nLen,
+      dirZ: nz / nLen,
+    };
+    this.broadcast("shot_event", shotEvent);
+    const rangeFactor = 1 - (dist / p.maxRange) * 0.5;
+    const hitChance = (0.35 + p.tier * 0.1) * rangeFactor;
+    if (Math.random() > hitChance || enemy.frozen) return;
+    if (enemy.isBot) {
+      enemy.frozen = true;
+      enemy.phase = "FROZEN";
+      enemy.deaths += 1;
+    } else {
+      const frozen = applyHitToOnlineActor(enemy, "body");
+      if (!frozen) return;
+    }
+    enemy.frozenTimer = BOT_RESPAWN_SECONDS;
+    bot.kills = Math.min(MAX_KILLS, bot.kills + 1);
+    const freezeEvent: FreezeEventMessage = {
+      targetId: enemy.id,
+      killerName: bot.name,
+      killerTeam: bot.team,
+      victimName: enemy.name,
+      victimTeam: enemy.team,
+    };
+    this.broadcast("freeze_event", freezeEvent);
+    this.checkFullFreezeWin();
   }
 
   // ── Lobby helpers ───────────────────────────────────────────────────────────
@@ -881,6 +1003,25 @@ function makeServerArenaQuery(
   };
 }
 
+interface BotPersonality {
+  tier: number;
+  launchSpeed: number;
+  fireDelay: number;
+  angleNoise: number;
+  maxRange: number;
+}
+
+function botPersonality(idHash: number): BotPersonality {
+  const tier = idHash % 5;
+  return {
+    tier,
+    launchSpeed: 6 + tier * 2,      // 6..14
+    fireDelay: 3.0 - tier * 0.4,    // 3.0..1.4s
+    angleNoise: 0.45 - tier * 0.08, // 0.45..0.13
+    maxRange: 15 + tier * 5,        // 15..35
+  };
+}
+
 function botIdHash(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) {
@@ -902,12 +1043,56 @@ function botIntegrateZeroG(actor: ActorState, dt: number): void {
   actor.posZ += actor.velZ * dt;
 }
 
-function botBounceArena(actor: ActorState): void {
+function botBounceArena(actor: ActorState, goalAxis: "x" | "z"): void {
   const half = ARENA_SIZE / 2 - PLAYER_RADIUS;
-  if (actor.posX < -half) { actor.posX = -half; actor.velX = Math.abs(actor.velX); }
-  else if (actor.posX > half) { actor.posX = half; actor.velX = -Math.abs(actor.velX); }
+  const perpAxis: "x" | "z" = goalAxis === "x" ? "z" : "x";
+
+  // Y axis — always solid
   if (actor.posY < -half) { actor.posY = -half; actor.velY = Math.abs(actor.velY); }
   else if (actor.posY > half) { actor.posY = half; actor.velY = -Math.abs(actor.velY); }
-  if (actor.posZ < -half) { actor.posZ = -half; actor.velZ = Math.abs(actor.velZ); }
-  else if (actor.posZ > half) { actor.posZ = half; actor.velZ = -Math.abs(actor.velZ); }
+
+  // Perp axis — always solid
+  if (perpAxis === "x") {
+    if (actor.posX < -half) { actor.posX = -half; actor.velX = Math.abs(actor.velX); }
+    else if (actor.posX > half) { actor.posX = half; actor.velX = -Math.abs(actor.velX); }
+  } else {
+    if (actor.posZ < -half) { actor.posZ = -half; actor.velZ = Math.abs(actor.velZ); }
+    else if (actor.posZ > half) { actor.posZ = half; actor.velZ = -Math.abs(actor.velZ); }
+  }
+
+  // Goal axis — portal openings on both walls; breach room back wall at ±(ARENA_SIZE/2 + BREACH_ROOM_D)
+  const perpPos = perpAxis === "x" ? actor.posX : actor.posZ;
+  const inPortal = Math.abs(actor.posY) < BREACH_ROOM_H / 2 - PLAYER_RADIUS
+    && Math.abs(perpPos) < BREACH_ROOM_W / 2 - PLAYER_RADIUS;
+  const maxDepth = ARENA_SIZE / 2 + BREACH_ROOM_D - PLAYER_RADIUS;
+
+  if (goalAxis === "x") {
+    if (actor.posX < -half) {
+      if (inPortal) {
+        if (actor.posX < -maxDepth) { actor.posX = -maxDepth; actor.velX = Math.abs(actor.velX); }
+      } else {
+        actor.posX = -half; actor.velX = Math.abs(actor.velX);
+      }
+    } else if (actor.posX > half) {
+      if (inPortal) {
+        if (actor.posX > maxDepth) { actor.posX = maxDepth; actor.velX = -Math.abs(actor.velX); }
+      } else {
+        actor.posX = half; actor.velX = -Math.abs(actor.velX);
+      }
+    }
+  } else {
+    if (actor.posZ < -half) {
+      if (inPortal) {
+        if (actor.posZ < -maxDepth) { actor.posZ = -maxDepth; actor.velZ = Math.abs(actor.velZ); }
+      } else {
+        actor.posZ = -half; actor.velZ = Math.abs(actor.velZ);
+      }
+    } else if (actor.posZ > half) {
+      if (inPortal) {
+        if (actor.posZ > maxDepth) { actor.posZ = maxDepth; actor.velZ = -Math.abs(actor.velZ); }
+      } else {
+        actor.posZ = half; actor.velZ = -Math.abs(actor.velZ);
+      }
+    }
+  }
 }

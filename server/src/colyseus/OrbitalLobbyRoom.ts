@@ -36,6 +36,7 @@ import {
   PLAYER_RADIUS,
 } from "../../../shared/constants";
 import type { PlayerPhase } from "../../../shared/schema";
+import { generateSpawnPositions } from "../../../shared/player-logic";
 import { applyHitToOnlineActor, isHitZone, normalizeAuthoritativePhase } from "./actorDamage";
 import { ActorState, LobbyMemberState, OrbitalLobbyState } from "./state";
 
@@ -542,11 +543,24 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
     const layout = generateArenaLayout(this.state.roundNumber);
     const { goalAxis, goalSigns } = layout;
 
-    const team0Center = breachRoomCenter(goalAxis, goalSigns.team0);
-    const team1Center = breachRoomCenter(goalAxis, goalSigns.team1);
+    // openSign = direction FROM breach room TOWARD arena (opposite of goalSign)
+    const openSign0 = (-goalSigns.team0) as 1 | -1;
+    const openSign1 = (-goalSigns.team1) as 1 | -1;
 
-    this.botSpawnYaw[0] = breachExitYaw(goalAxis, goalSigns.team0);
-    this.botSpawnYaw[1] = breachExitYaw(goalAxis, goalSigns.team1);
+    this.botSpawnYaw[0] = breachExitYaw(goalAxis, openSign0);
+    this.botSpawnYaw[1] = breachExitYaw(goalAxis, openSign1);
+
+    const arenaQuery = makeServerArenaQuery(goalAxis, goalSigns);
+    const roundSeed = this.state.roundNumber;
+    const memberList = Array.from(this.state.members.values());
+    const team0Count = memberList.filter((m) => m.team === 0).length;
+    const team1Count = memberList.filter((m) => m.team === 1).length;
+    const slots0 = generateSpawnPositions(0, team0Count, arenaQuery, roundSeed * 11 + 7);
+    const slots1 = generateSpawnPositions(1, team1Count, arenaQuery, roundSeed * 17 + 13);
+    const center0 = arenaQuery.getBreachRoomCenter(0);
+    const center1 = arenaQuery.getBreachRoomCenter(1);
+    const floorY0 = center0.y - BREACH_ROOM_H / 2 + PLAYER_RADIUS + 0.08;
+    const floorY1 = center1.y - BREACH_ROOM_H / 2 + PLAYER_RADIUS + 0.08;
 
     let team0Index = 0;
     let team1Index = 0;
@@ -567,14 +581,19 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
       actor.deaths = 0;
       actor.yaw = this.botSpawnYaw[member.team];
 
-      const center = member.team === 0 ? team0Center : team1Center;
-      const sign = member.team === 0 ? goalSigns.team0 : goalSigns.team1;
-      const index = member.team === 0 ? team0Index++ : team1Index++;
-      const spawn = breachSpawnPos(center, goalAxis, sign, index);
-
-      actor.posX = spawn.x;
-      actor.posY = spawn.y;
-      actor.posZ = spawn.z;
+      if (member.team === 0) {
+        const slot = slots0[team0Index] ?? slots0[slots0.length - 1] ?? center0;
+        actor.posX = slot.x;
+        actor.posY = floorY0;
+        actor.posZ = slot.z;
+        team0Index += 1;
+      } else {
+        const slot = slots1[team1Index] ?? slots1[slots1.length - 1] ?? center1;
+        actor.posX = slot.x;
+        actor.posY = floorY1;
+        actor.posZ = slot.z;
+        team1Index += 1;
+      }
 
       if (member.isBot) {
         const idHash = botIdHash(member.id);
@@ -841,25 +860,25 @@ function breachRoomCenter(goalAxis: "x" | "y" | "z", sign: 1 | -1): { x: number;
   return center;
 }
 
-function breachSpawnPos(
-  center: { x: number; y: number; z: number },
-  goalAxis: "x" | "y" | "z",
-  sign: 1 | -1,
-  index: number,
-): { x: number; y: number; z: number } {
-  const floorY = center.y - BREACH_ROOM_H / 2 + PLAYER_RADIUS + 0.1;
-  const backOffset = BREACH_ROOM_D / 2 - PLAYER_RADIUS - 0.5;
-  const pos = { x: center.x, y: floorY, z: center.z };
-  pos[goalAxis] = center[goalAxis] - sign * backOffset;
-  const widthAxis: "x" | "z" = goalAxis === "z" ? "x" : "z";
-  pos[widthAxis] = center[widthAxis] + (index - 1) * 1.5;
-  return pos;
+function breachExitYaw(axis: "x" | "y" | "z", openSign: 1 | -1): number {
+  const dx = axis === "x" ? openSign : 0;
+  const dz = axis === "z" ? openSign : 0;
+  return Math.atan2(-dx, -dz);
 }
 
-function breachExitYaw(axis: "x" | "y" | "z", sign: 1 | -1): number {
-  const dx = axis === "x" ? sign : 0;
-  const dz = axis === "z" ? sign : 0;
-  return Math.atan2(-dx, -dz);
+function makeServerArenaQuery(
+  goalAxis: "x" | "y" | "z",
+  goalSigns: { team0: 1 | -1; team1: 1 | -1 },
+) {
+  const center0 = breachRoomCenter(goalAxis, goalSigns.team0);
+  const center1 = breachRoomCenter(goalAxis, goalSigns.team1);
+  const openSign0 = (-goalSigns.team0) as 1 | -1;
+  const openSign1 = (-goalSigns.team1) as 1 | -1;
+  return {
+    getBreachRoomCenter: (team: 0 | 1) => (team === 0 ? center0 : center1),
+    getBreachOpenAxis: (_team: 0 | 1) => goalAxis,
+    getBreachOpenSign: (team: 0 | 1) => (team === 0 ? openSign0 : openSign1),
+  };
 }
 
 function botIdHash(id: string): number {

@@ -31,6 +31,7 @@ import {
   BREACH_ROOM_D,
   BREACH_ROOM_H,
   MATCH_POINT_TARGET,
+  MAX_LAUNCH_SPEED,
   MAX_SPEED,
   PLAYER_RADIUS,
 } from "../../../shared/constants";
@@ -60,6 +61,7 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
   private matchTick: ReturnType<typeof setInterval> | null = null;
   private botCounters: Record<LobbyTeam, number> = { 0: 0, 1: 0 };
   private botSpawnYaw: Record<LobbyTeam, number> = { 0: 0, 1: 0 };
+  private botAI = new Map<string, { launchTimer: number }>();
   private countdownPreparedRound = false;
   private roundResolved = false;
   private lastPlayerUpdate = new Map<string, number>();
@@ -574,12 +576,18 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
       actor.posY = spawn.y;
       actor.posZ = spawn.z;
 
+      if (member.isBot) {
+        const idHash = botIdHash(member.id);
+        this.botAI.set(member.id, { launchTimer: 1.5 + (idHash % 30) * 0.1 });
+      }
+
       this.state.actors.set(member.id, actor);
     }
   }
 
   private clearActors(): void {
     this.state.actors.clear();
+    this.botAI.clear();
   }
 
   private tickBots(dt: number): void {
@@ -597,9 +605,45 @@ export class OrbitalLobbyRoom extends Room<{ state: OrbitalLobbyState }> {
           actor.rightArm = false;
           actor.leftLeg = false;
           actor.rightLeg = false;
+          actor.velX = 0;
+          actor.velY = 0;
+          actor.velZ = 0;
           actor.yaw = this.botSpawnYaw[actor.team];
+          const idHash = botIdHash(actor.id);
+          this.botAI.set(actor.id, { launchTimer: 1.5 + (idHash % 30) * 0.1 });
         }
         continue;
+      }
+
+      if (actor.phase === "BREACH") {
+        const ai = this.botAI.get(actor.id);
+        if (!ai) continue;
+        ai.launchTimer -= dt;
+        if (ai.launchTimer <= 0) {
+          const dx = -actor.posX;
+          const dy = -actor.posY;
+          const dz = -actor.posZ;
+          const len = Math.hypot(dx, dy, dz) || 1;
+          const speed = 10;
+          actor.velX = (dx / len) * speed;
+          actor.velY = (dy / len) * speed;
+          actor.velZ = (dz / len) * speed;
+          actor.phase = "FLOATING";
+          const horizLen = Math.hypot(dx, dz);
+          if (horizLen > 0.01) {
+            actor.yaw = Math.atan2(-dx / horizLen, -dz / horizLen);
+          }
+        }
+        continue;
+      }
+
+      if (actor.phase === "FLOATING") {
+        botIntegrateZeroG(actor, dt);
+        botBounceArena(actor);
+        const horizSpeed = Math.hypot(actor.velX, actor.velZ);
+        if (horizSpeed > 0.5) {
+          actor.yaw = Math.atan2(-actor.velX, -actor.velZ);
+        }
       }
     }
   }
@@ -816,4 +860,35 @@ function breachExitYaw(axis: "x" | "y" | "z", sign: 1 | -1): number {
   const dx = axis === "x" ? sign : 0;
   const dz = axis === "z" ? sign : 0;
   return Math.atan2(-dx, -dz);
+}
+
+function botIdHash(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (h + id.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+function botIntegrateZeroG(actor: ActorState, dt: number): void {
+  const speed = Math.hypot(actor.velX, actor.velY, actor.velZ);
+  if (speed > MAX_LAUNCH_SPEED) {
+    const scale = MAX_LAUNCH_SPEED / speed;
+    actor.velX *= scale;
+    actor.velY *= scale;
+    actor.velZ *= scale;
+  }
+  actor.posX += actor.velX * dt;
+  actor.posY += actor.velY * dt;
+  actor.posZ += actor.velZ * dt;
+}
+
+function botBounceArena(actor: ActorState): void {
+  const half = ARENA_SIZE / 2 - PLAYER_RADIUS;
+  if (actor.posX < -half) { actor.posX = -half; actor.velX = Math.abs(actor.velX); }
+  else if (actor.posX > half) { actor.posX = half; actor.velX = -Math.abs(actor.velX); }
+  if (actor.posY < -half) { actor.posY = -half; actor.velY = Math.abs(actor.velY); }
+  else if (actor.posY > half) { actor.posY = half; actor.velY = -Math.abs(actor.velY); }
+  if (actor.posZ < -half) { actor.posZ = -half; actor.velZ = Math.abs(actor.velZ); }
+  else if (actor.posZ > half) { actor.posZ = half; actor.velZ = -Math.abs(actor.velZ); }
 }
